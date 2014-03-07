@@ -31,22 +31,21 @@ class Request(pilo.Form):
     ))
 
     @headers.munge
-    def headers(self, v):
-        return dict(v)
+    def headers(self, value):
+        return dict(value)
 
-    method = pilo.fields.Enum(choices=['GET', 'POST', 'PUT', 'DELETE'])
+    method = pilo.fields.String(choices=['GET', 'POST', 'PUT', 'DELETE'])
 
 
 class Envelope(pilo.Form):
 
     guru_id = pilo.fields.String(pattern=r'OHM(\w){32}$')
 
-    request = pilo.fields.SubForm(form=Request)
+    request = pilo.fields.SubForm(Request)
 
 
-source = pilo.mime.application_json.Source(raw)
+source = json.loads(raw)
 form = Envelope()
-result, errors = form(source)
-
-pprint(result)
+errors = form(source)
+pprint(form)
 pprint(errors)
