@@ -21,9 +21,9 @@ setuptools.setup(
     package_data={'': ['LICENSE']},
     include_package_data=True,
     tests_require=[
-        'nose >=1.1.0',
-        'mock ==0.8',
-        'unittest2 >=0.5.1',
+        'nose >=1.0,<2.0',
+        'mock >=1.0,<2.0',
+        'unittest2 >=0.5.1,<0.6',
         'coverage',
     ],
     install_requires=[],
