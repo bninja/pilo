@@ -2,5 +2,5 @@
 pilo
 ====
 
-.. image:: https://secure.travis-ci.org/bninja/pilo.png?branch=master
-   :target: https://secure.travis-ci.org/bninja/pilo
+.. image:: https://travis-ci.org/bninja/pilo.png
+   :target: https://travis-ci.org/bninja/pilo
