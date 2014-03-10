@@ -2,36 +2,36 @@
 This defines `Form` and the `Field`s use to build them. Use it like:
 
     .. code:: python
-    
+
         import pilo
         import pprint
 
         class MySubForm(pilo.Form):
-        
+
             sfield1 = pilo.fields.Float(default=12.0)
-            
+
             sfield2 = pilo.fields.Tuple(
                 pilo.fields.String(), pilo.fields.Integer().min(10),
                 default=None
             )
 
-        
+
         class MyForm(pilo.Form)
-        
+
             field1 = pilo.fields.Integer().min(10).max(100)
-            
+
             @field1.munge
             def field1(self, value):
                 return value + 1
-            
+
             field2 = pilo.Bool('ff2', default=None)
-            
+
             field3 = pilo.fields.SubForm(MySubForm, 'payload')
 
 
         form = MyForm({
             'field1': 55,
-            'ff2': True, 
+            'ff2': True,
             'payload': {
                 'sfield2': ('somestring', 456),
             }
@@ -39,14 +39,15 @@ This defines `Form` and the `Field`s use to build them. Use it like:
 
         pprint.pprint(form)
         print form.payload.sfield
- 
+
 """
 from datetime import datetime
 import decimal
 import inspect
 import re
 
-from . import NONE, ERROR, IGNORE, ctx, ContextMixin, IdentitySource, Source
+from . import NONE, ERROR, IGNORE, ctx, ContextMixin, Source, DefaultSource
+from IPython.testing.plugin.dtexample import ipfunc
 
 
 __all__ = [
@@ -77,7 +78,7 @@ class Missing(FieldError):
 
     def __init__(self, field):
         super(Missing, self).__init__(
-            '{0}'.format(ctx.src.path(field.src)), field,
+            '{0}'.format(field.ctx.src_path), field,
         )
 
 
@@ -85,7 +86,7 @@ class Invalid(FieldError):
 
     def __init__(self, field, violation):
         super(Invalid, self).__init__(
-            '{0} - {1}'.format(ctx.src.path(field.src), violation), field,
+            '{0} - {1}'.format(ctx.src_path, violation), field,
         )
         self.violation = violation
 
@@ -102,7 +103,7 @@ class Errors(list):
 class CreatedCountMixin(object):
     """
     Mixin used to add a `._count` instance value that can use used to sort
-    instances in creation order. 
+    instances in creation order.
     """
 
     _created_count = 0
@@ -116,14 +117,14 @@ class Hook(object):
     """
     An override-able hook allowing users to inject functions to customize
     behavior. By using this we allow stuff like:
-    
-    
+
+
     .. code:: python
-    
+
         class Form(pilo.Form)
-        
+
             f1 = pilo.fields.Integer(default=None)
-            
+
             @f1.filter
             def field1(self, value):
                 return value < 10
@@ -176,55 +177,55 @@ class Field(CreatedCountMixin, ContextMixin):
         - munge  (see `Field._munge`)
         - filter  (see `Field._filter`)
         - validate  (see `Field._validate`)
-    
+
     You can hook any of these steps using the corresponding hook, so e.g.:
-    
+
     .. code:: python
-        
+
         class MyForm(pilo.Form)
-        
+
             factor = pilo.fields.Integer()
-            
+
             @factor.munge
             def factor(self value):
-                return math.radian(value) 
-        
+                return math.radian(value)
+
     Here are the important attributes:
-    
+
     `name`
         The name of this field as a string. This will typically be whatever
         name is assigned a field when its attached to a `Form`:
-        
+
         .. code:: python
-        
+
             class Form(pilo.Form)
-            
+
                 hiya = pilo.fields.Bool()
-                
-        Here field Form.hyia.name is "hyia". 
-        
+
+        Here field Form.hyia.name is "hyia".
+
     `src`
-        This is the key of this field in a `Source`. This will default to 
+        This is the key of this field in a `Source`. This will default to
         `name` but you can override it:
 
         .. code:: python
-        
+
             class Form(pilo.Form)
-            
+
                 hiya = pilo.fields.Bool()
-                
+
                 bye = pilo.fields.Bool('adieu')
-                
+
         Here field Form.hyia.src is "hyia" but Form.bye.src is "adieu".
 
     `default`
         This is the default value of this field to use if `src` is not present
         in `Source`.
-        
+
     `nullable`
         Flag indicating whether or not this field's value can be None. Note
-        that if `default` is None then `nullable` will be True 
-        
+        that if `default` is None then `nullable` will be True
+
     `ignores`
         A list of literal values to ignore. If a value it ignored `default`
         will be used. If you have more complicated **filtering** logic use a
@@ -232,29 +233,29 @@ class Field(CreatedCountMixin, ContextMixin):
 
     `translations`
         A mapping use to translated field values to other literal values. e.g.
-        
+
         .. code:: python
-        
+
             class Form(pilo.Form)
-                
+
                 hiya = pilo.fields.String(choices=['one', 'two']).translate({'one': 1, 'two': 2})
-                
+
         If you have more complicated **munging** logic use a `Field.munge` hook.
 
     `parent`
         This is the immediate parent this field is attached to. It will
         typically be a `Form` but can be another `Field`:
-        
+
         .. code:: python
-        
+
             class MyForm(pilo.Form)
-            
+
                 hiya = pilo.fields.Bool()
-                
+
                 peeps = pilo.fields.List(pilo.fields.String())
-                
+
         Here MyForm.hiya.parent is MyForm while Form.peeps.field.parent is
-        MyForm.peeps.  
+        MyForm.peeps.
 
     `tags`
         A list of strings to tag this field with.
@@ -329,45 +330,45 @@ class Field(CreatedCountMixin, ContextMixin):
 
     def _compute(self):
         """
-        Resolves and parses this fields `src` from `ctx.src`. 
+        Resolves and parses this fields `src` from `ctx.src`.
         """
         if self.resolve:
-            value = self.resolve()
+            path = self.resolve()
         else:
-            value = self._resolve()
-        if value is None:
-            return value
-        if value is NONE:
+            path = self._resolve()
+        if path is None:
+            return path
+        if path is NONE:
             return self._default()
         try:
             if self.parse:
-                value = self.parse(value)
+                value = self.parse(path)
             else:
-                value = self._parse(value)
+                value = self._parse(path)
+            return value
         except ValueError, ex:
             self.ctx.errors.invalid(str(ex))
             return ERROR
-        return value
 
     def _resolve(self):
         """
         Resolves this fields `src` with `ctx.src`. The return value is passed
-        to `_parse`. 
+        to `_parse`.
         """
-        if not self.ctx.src:
+        if not self.ctx.src_path.exists:
             return NONE
-        return self.ctx.src.resolve(self.src)
+        return self.ctx.src_path
 
-    def _parse(self, value):
+    def _parse(self, path):
         """
-        Parses a resolved `src` from `ctx.src`. The return value is typically
-        passed along to to `_munge`.  
+        Parses a `src` path. The return value is typically passed along to to
+        `_munge`.
         """
-        return self.ctx.src.parse(self.src, value, None)
+        return path.primitive(None)
 
     def _filter(self, value):
         """
-        Predicate used to exclude, False, or include, True, a computed value. 
+        Predicate used to exclude, False, or include, True, a computed value.
         """
         if self.ignores and value in self.ignores:
             return False
@@ -376,7 +377,7 @@ class Field(CreatedCountMixin, ContextMixin):
     def _validate(self, value):
         """
         Predicate used to determine if a computed value is valid, True, or
-        not, False. 
+        not, False.
         """
         if value is None and not self.nullable:
             ctx.errors.invalid('not nullable')
@@ -405,41 +406,49 @@ class Field(CreatedCountMixin, ContextMixin):
         value.
 
         :param value: optional **pre-computed** value.
-        
+
         :return: The successfully mapped value or:
 
             - MISSING if none was not found
-            - ERROR if the field was present in `ctx.src` but invalid. 
-              
+            - ERROR if the field was present in `ctx.src` but invalid.
+
         """
         with self.ctx(field=self):
-            if value is NONE:
-                # compute
-                if self.compute:
-                    value = self.compute()
-                else:
-                    value = self._compute()
+            if not hasattr(self.ctx, 'src_path'):
+                return self._default()
+            try:
+                if self.src not in (NONE, None):
+                    self.ctx.src_path.push(self.src)
+
+                if value is NONE:
+                    # compute
+                    if self.compute:
+                        value = self.compute()
+                    else:
+                        value = self._compute()
+                    if value in IGNORE:
+                        return value
+
+                # munge
+                value = self._munge(value)
+                if value not in IGNORE and self.munge:
+                    value = self.munge(value)
+                if value is NONE:
+                    return self._default()
                 if value in IGNORE:
                     return value
 
-            # munge
-            value = self._munge(value)
-            if value not in IGNORE and self.munge:
-                value = self.munge(value)
-            if value is NONE:
-                return self._default()
-            if value in IGNORE:
+                # filter
+                if not self._filter(value) or (self.filter and not self.filter(value)):
+                    return self._default()
+
+                # validate
+                if not self._validate(value) or (self.validate and not self.validate(value)):
+                    return ERROR
                 return value
-
-            # filter
-            if not self._filter(value) or (self.filter and not self.filter(value)):
-                return self._default()
-
-            # validate
-            if not self._validate(value) or (self.validate and not self.validate(value)):
-                return ERROR
-
-            return value
+            finally:
+                if self.src not in (NONE, None):
+                    self.ctx.src_path.pop()
 
     def __get__(self, form, form_type=None):
         if form is None:
@@ -513,7 +522,7 @@ class String(Field):
         return self.munge.attach(self)(munge)
 
     def _parse(self, value):
-        return self.ctx.src.parse(self.src, value, basestring)
+        return self.ctx.src_path.primitive(basestring)
 
     def _validate(self, value):
         if not super(String, self)._validate(value):
@@ -589,8 +598,8 @@ class Integer(Number):
         if isinstance(pattern_re, basestring):
             pattern_re = re.compile(pattern_re)
 
-        def parse(self, name, value):
-            value = self.ctx.src.parse(name, value, basestring)
+        def parse(self, path):
+            value = path.primitive(basestring)
             m = pattern_re.match(value)
             if not m:
                 raise ValueError('{} does not match pattern "{}"'.format(
@@ -600,8 +609,8 @@ class Integer(Number):
 
         return self.parse(parse)
 
-    def _parse(self, value):
-        return ctx.src.parse(self.src, value, int)
+    def _parse(self, path):
+        return ctx.src_path.primitive(int)
 
 
 Int = Integer
@@ -613,8 +622,8 @@ class Float(Number):
         if isinstance(pattern_re, basestring):
             pattern_re = re.compile(pattern_re)
 
-        def parse(self, name, value):
-            value = ctx.src.parse(name, value, basestring)
+        def parse(self, path):
+            value = path.primitive(basestring)
             m = pattern_re.match(value)
             if not m:
                 raise ValueError('{} does not match pattern "{}"'.format(
@@ -624,21 +633,21 @@ class Float(Number):
 
         return self.parse(parse)
 
-    def _parse(self, value):
-        return ctx.src.parse(self.src, value, float)
+    def _parse(self, path):
+        return path.primitive(float)
 
 
 class Decimal(Number):
 
-    def _parse(self, value):
-        return ctx.src.parse(self.src, value, decimal.Decimal)
+    def _parse(self, path):
+        return path.primitive(decimal.Decimal)
 
 
 
 class Boolean(Field):
 
-    def _parse(self, value):
-        return ctx.src.parse(self.src, value, bool)
+    def _parse(self, path):
+        return path.primitive(bool)
 
 
 Bool = Boolean
@@ -649,6 +658,7 @@ class Datetime(Field):
     def __init__(self, *args, **kwargs):
         self.after_value = kwargs.pop('after', None)
         self.before_value = kwargs.pop('before', None)
+        self.strptime_fmt = kwargs.pop('format')
         super(Datetime, self).__init__(*args, **kwargs)
 
     def after(self, value):
@@ -662,16 +672,13 @@ class Datetime(Field):
     def between(self, l, r):
         return self.after(l).before(r)
 
-    def format(self, strptime_fmt):
+    def format(self, fmt):
+        self.strptime_fmt = fmt
+        return self
 
-        def parse(self, value):
-            raw = self.ctx.src.parse(self.src, value, basestring)
-            return datetime.strptime(raw, strptime_fmt)
-
-        return self.parse.attach(self)(parse)
-
-    def _parse(self, value):
-        return ctx.src.resolve(self.src, value, datetime)
+    def _parse(self, path):
+        value = path.primitive(basestring)
+        return datetime.strptime(value, self.strptime_fmt)
 
     def _validate(self, value):
         if not super(Datetime, self)._validate(value):
@@ -689,7 +696,7 @@ class Datetime(Field):
 class Tuple(Field):
 
     def __init__(self, fields, *args, **kwargs):
-        if not isinstance(fields, (list, tuple)):
+        if not isinstance(fields, (tuple, list)):
             raise ValueError(
                'Invalid fields "{0}" should be a sequence of {1} instances'
                .format(fields, Field.__name__)
@@ -698,22 +705,23 @@ class Tuple(Field):
         super(Tuple, self).__init__(*args, **kwargs)
 
     def _compute(self):
-        length = self.ctx.src.sequence(self.src)
-        if length is NONE:
+        if not self.ctx.src_path.exists:
             return self._default()
+        if self.ctx.src_path.is_null:
+            return None
+        length = self.ctx.src_path.sequence()
         if length != len(self.fields):
-            ctx.errors.invalid('Must have exactly {} items'.format(
+            ctx.errors.invalid('Must have exactly {0} items'.format(
                 len(self.fields)
             ))
             return ERROR
         value = []
-        with self.ctx.push_src(self.src):
-            for i in xrange(length):
-                with self.ctx.push_src(i):
-                    item = self.fields[i]()
-                    if item in IGNORE:
-                        continue
-                    value.append(item)
+        for i in xrange(length):
+            with self.ctx.src_path.push(i):
+                item = self.fields[i]()
+                if item in IGNORE:
+                    continue
+                value.append(item)
         return tuple(value)
 
 
@@ -737,19 +745,18 @@ class List(Field):
         return self.min(l).max(r)
 
     def _compute(self):
-        if not self.ctx.src:
+        if not self.ctx.src_path.exists:
             return self._default()
-        length = self.ctx.src.sequence(self.src)
+        length = self.ctx.src_path.sequence()
         if length is NONE:
             return self._default()
         value = []
-        with self.ctx.push_src(self.src):
-            for i in xrange(length):
-                with self.ctx.push_src(i):
-                    item = self.field()
-                    if item in IGNORE:
-                        continue
-                    value.append(item)
+        for i in xrange(length):
+            with self.ctx.src_path.push(i):
+                item = self.field()
+                if item in IGNORE:
+                    continue
+                value.append(item)
         return value
 
     def _validate(self, value):
@@ -779,22 +786,23 @@ class Dict(Field):
         super(Dict, self).__init__(*args, **kwargs)
 
     def _compute(self):
-        if not self.ctx.src:
+        if not self.ctx.src_path.exists:
             return self._default()
-        keys = ctx.src.mapping(self.src)
+        if self.ctx.src_path.is_null:
+            return None
+        keys = self.ctx.src_path.mapping()
         if keys is NONE:
             return self._default()
         mapping = {}
-        with self.ctx.push_src(self.src):
-            for key in keys:
-                with self.ctx.push_src(key):
-                    value = self.value_field()
-                    if value in IGNORE:
-                        continue
-                    key = self.key_field(key)
-                    if key in IGNORE:
-                        continue
-                    mapping[key] = value
+        for key in keys:
+            with self.ctx.src_path.push(key):
+                value = self.value_field()
+                if value in IGNORE:
+                    continue
+                key = self.key_field(key)
+                if key in IGNORE:
+                    continue
+                mapping[key] = value
         return mapping
 
     def _validate(self, value):
@@ -823,24 +831,23 @@ class SubForm(Field):
         super(SubForm, self).__init__(*args, **kwargs)
 
     def _compute(self):
-        with self.ctx.push(form_key=self.name, src_key=self.src):
-            form = self.form_type()
-            form()
-            return form
+        form = self.form_type()
+        form()
+        return form
 
 
 class FormMeta(type):
     """
     Used to auto-magically register a `Form`s fields:
-    
+
     .. code:: python
-    
+
         class MyForm(pilo.Form)
-        
+
             a_int = pilo.field.Integer()
-            
+
     Now:
-    
+
         - MyForm.a_int.attach(MyForm, 'a_int') has been called and
         - MyForm.fields is [MyForm.a_int]
 
@@ -863,42 +870,42 @@ class Form(dict, CreatedCountMixin, ContextMixin):
     """
     This is a `dict` with an associated list of attached fields and typically
     represents some mapping structured to be parsed out of a `Source`.
-    
+
     To use it you will typically declare one like:
-    
+
     .. code:: python
-    
+
         class MyForm(pilo.Form)
-        
+
             field1 = pilo.fields.Integer().min(10).max(100).tag('buggy')
-            
+
             @field1.munge
             def field1(self, value):
                 return value + 1
-            
+
             field2 = pilo.Bool('ff2', default=None)
-    
+
     and then parse it like:
-    
+
     .. code:: python
-    
+
         form = MyForm({
             'field1': 55,
-            'ff2': True, 
+            'ff2': True,
             'payload': {
                 'sfield2': ('somestring', 456),
             }
         })
-        
+
     Here we are just using a plain old `dict` as the `Source` (i.e. the
-    `IdentitySource`). Note that you can also call a form to process a source:
-    
+    `source.DefaultSource`). Note that you can also call a form to process a source:
+
     .. code:: python
-    
+
         form = MyForm()
         form.({
             'field1': 55,
-            'ff2': True, 
+            'ff2': True,
             'payload': {
                 'sfield2': ('somestring', 456),
             }
@@ -918,10 +925,10 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 src = args[0]
                 args = args[1:]
             elif isinstance(args[0], dict):
-                src = IdentitySource(args[0])
+                src = DefaultSource(args[0])
                 args = args[1:]
         elif kwargs:
-            src = IdentitySource(kwargs)
+            src = DefaultSource(kwargs)
             kwargs = {}
         dict.__init__(self, *args, **kwargs)
         if src:
@@ -943,9 +950,9 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 return self
 
             if src is None:
-                src = IdentitySource({})
+                src = DefaultSource({})
             elif isinstance(src, dict):
-                src = IdentitySource(src)
+                src = DefaultSource(src)
             elif isinstance(src, Source):
                 pass
             else:

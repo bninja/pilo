@@ -1,6 +1,6 @@
-from . import TestCase
-
 import pilo
+
+from . import TestCase
 
 
 class TestForm(TestCase):

@@ -7,17 +7,17 @@ There is a global, thread-local instance of `Context`, `ctx`, used to:
 Source and destination paths are managed like:
 
     .. code:: python
-    
+
         print ctx.src_path, ctx.src_depth
-        print ctx.form_path, ctx.form_depth
+        print ctx.dst_path, ctx.dst_depth
         with ctx.push('dst', 'src'):
             print ctx.src_path, ctx.src_depth
-        print ctx.form_path, ctx.form_depth 
+        print ctx.dst_path, ctx.dst_depth
 
 and `Context` variables are are managed like:
 
     .. code:: python
-    
+
         with ctx(my_var=123):
             print ctx.my_var
         try:
@@ -59,17 +59,32 @@ class Close(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        if isinstance(self.func, list):
-            for func in self.func:
-                func()
-        else:
-            self.func()
+        self.func()
+
+
+class DestinationPath(list):
+
+    def push(self, part):
+        self.append(part)
+        return Close(self.pop)
+
+    def __str__(self):
+        if not self:
+            return ''
+        parts = [self[0]]
+        for part in self[1:]:
+            if isinstance(part, int):
+                part = '[{0}]'.format(int)
+            else:
+                part = '.' + part
+            parts.append(part)
+        return ''.join(parts)
 
 
 class Context(threading.local):
     """
     Used to manage:
-        
+
     - a stack of variable `Frame`
     - paths with a source and destination (i.e. form).
 
@@ -78,8 +93,8 @@ class Context(threading.local):
 
     def __init__(self):
         threading.local.__init__(self)
-        self.stack = [Frame(src=None, src_path=None)]
-        self.form_path = []
+        self.stack = [Frame(src=None)]
+        self.dst_path = DestinationPath()
 
     def __getattr__(self, k):
         for frame in reversed(self.stack):
@@ -97,44 +112,18 @@ class Context(threading.local):
         """
         Used if you need to recursively parse forms.
         """
-        form_path = self.form_path
-        self.form_path = []
-        self.stack.append(Frame(src=None, src_path=None))
-        return Close(functools.partial(self.restore, form_path))
+        dst_path = self.dst_path
+        self.dst_path = []
+        self.stack.append(Frame(src=None))
+        return Close(functools.partial(self.restore, dst_path))
 
-    def restore(self, form_path):
-        self.form_path = form_path
+    def restore(self, dst_path):
+        self.dst_path = dst_path
         self.stack.pop()
 
-    def push(self, form_key, src_key):
-        pops = []
-        if form_key:
-            pops.append(self.push_form(form_key).func)
-        if src_key:
-            pops.append(self.push_src(src_key).func)
-        return Close(pops)
-
-    def push_form(self, key):
-        self.form_path.append(key)
-        return Close(self.pop_form)
-
-    def pop_form(self):
-        self.form_path.pop()
-
     @property
-    def form_depth(self):
-        return len(self.form_path)
-
-    def push_src(self, key):
-        if key in (NONE, None):
-            return Close(lambda: None)
-        if self.src_path is None:
-            self.src_path = []
-        self.src_path.append(key)
-        return Close(self.pop_src)
-
-    def pop_src(self):
-        self.src_path.pop()
+    def dst_depth(self):
+        return len(self.dst_path)
 
     @property
     def src_depth(self):

@@ -1,6 +1,6 @@
 """
 """
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 __all__ = [
     'NOT_SET',
@@ -13,8 +13,7 @@ __all__ = [
     'Form',
     'Source',
     'SourceError',
-    'IdentitySource',
-    'mime',
+    'DefaultSource',
     'ParseError',
 ]
 
@@ -38,6 +37,6 @@ IGNORE = (NONE, ERROR)
 
 from .context import ctx, ContextMixin
 from . import source
-from .source import Source, IdentitySource, ParseError, ParseError as SourceError
+from .source import Source, SourceError, DefaultSource
 from . import fields
 from .fields import Field, FieldError, Form

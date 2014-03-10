@@ -27,3 +27,4 @@ class TestCase(unittest.TestCase):
     @classmethod
     def read_fixture(cls, *path):
         return cls.open_fixture(*path).read()
+
