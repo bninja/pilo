@@ -17,6 +17,7 @@ setuptools.setup(
     long_description=open('README.rst').read(),
     packages=[
         'pilo',
+        'pilo.source',
     ],
     package_data={'': ['LICENSE']},
     include_package_data=True,
