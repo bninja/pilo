@@ -303,9 +303,10 @@ class Field(CreatedCountMixin, ContextMixin):
     @property
     def src_path(self):
         path = self.ctx.src.path()
-        for field in self.nesting:
-            path.push(field.src)
-        path.push(self.src)
+        for src in [field.src for field in self.nesting] + [self.src]:
+            if src in (None, NONE):
+                continue
+            path.push(src)
         return path
 
     def is_attached(self):

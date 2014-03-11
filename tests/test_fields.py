@@ -44,3 +44,43 @@ class TestForm(TestCase):
                 'sfield2': ('somestring', 456),
             }
         })
+
+    def test_form_envelope(self):
+
+        class Form(pilo.Form):
+
+            field1 = pilo.fields.Int().min(10).max(100)
+
+            field2 = pilo.fields.Bool(default=None)
+
+        class Envelope(pilo.Form):
+
+            container = pilo.fields.SubForm(Form, None)
+
+        form = Envelope({
+            'field1': 55,
+            'field2': True,
+        })
+        self.assertDictEqual({
+            'container': {
+                'field1': 55,
+                'field2': True,
+            }
+        }, form)
+
+    def test_field_envelope(self):
+
+        class Envelope(pilo.Form):
+
+            container = pilo.Field(None)
+
+        form = Envelope({
+            'field1': 55,
+            'field2': True,
+        })
+        self.assertDictEqual({
+            'container': {
+                'field1': 55,
+                'field2': True,
+            }
+        }, form)
