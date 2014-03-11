@@ -41,6 +41,7 @@ This defines `Form` and the `Field`s use to build them. Use it like:
         print form.payload.sfield
 
 """
+import contextlib
 from datetime import datetime
 import decimal
 import inspect
@@ -747,7 +748,10 @@ class Tuple(Field):
             return ERROR
         value = []
         for i in xrange(length):
-            with self.ctx.src_path.push(i), self.ctx(field=self.fields[i]):
+            with contextlib.nested(
+                    self.ctx.src_path.push(i),
+                    self.ctx(field=self.fields[i]),
+                ):
                 item = self.fields[i]()
                 if item in IGNORE:
                     continue

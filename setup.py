@@ -1,6 +1,15 @@
 import re
 import setuptools
 
+extras_require = {
+    'tests': [
+        'nose >=1.0,<2.0',
+        'mock >=1.0,<2.0',
+        'unittest2 >=0.5.1,<0.6',
+        'coverage',
+    ],
+}
+
 setuptools.setup(
     name='pilo',
     version=(
@@ -21,12 +30,8 @@ setuptools.setup(
     ],
     package_data={'': ['LICENSE']},
     include_package_data=True,
-    tests_require=[
-        'nose >=1.0,<2.0',
-        'mock >=1.0,<2.0',
-        'unittest2 >=0.5.1,<0.6',
-        'coverage',
-    ],
+    extras_require=extras_require,
+    tests_require=extras_require['tests'],
     install_requires=[],
     test_suite='nose.collector',
     classifiers=[
@@ -36,6 +41,7 @@ setuptools.setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
         'License :: OSI Approved :: ISC License (ISCL)',
         'Programming Language :: Python',
+        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
     ],
 )

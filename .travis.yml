@@ -4,4 +4,5 @@ python:
   - 2.7
 script: nosetests 
 install:
+  - pip install -e .[tests]
   - python setup.py test
