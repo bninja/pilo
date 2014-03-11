@@ -24,7 +24,7 @@ class _Constant(object):
         self.name = name
 
     def __repr__(self):
-        return '{}("{}")'.format(type(self).__name__, self.name)
+        return '{0}("{1}")'.format(type(self).__name__, self.name)
 
 
 NOT_SET = _Constant('NOT_SET')

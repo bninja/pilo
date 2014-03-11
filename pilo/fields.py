@@ -283,7 +283,12 @@ class Field(CreatedCountMixin, ContextMixin):
         self.tags = []
 
     def __str__(self):
-        return '{}(name="{}")'.format(type(self).__name__, self.name)
+        attrs = ', '.join(
+            '{0}={1}'.format(k, v) for k, v in [
+            ('name', self.name),
+            ('src', self.src),
+        ])
+        return '{0}({1})'.format(type(self).__name__, attrs)
 
     def attach(self, parent, name=None):
         self.parent, self.name = parent, name
