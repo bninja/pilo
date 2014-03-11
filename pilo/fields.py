@@ -46,8 +46,7 @@ import decimal
 import inspect
 import re
 
-from . import NONE, ERROR, IGNORE, ctx, ContextMixin, Source, DefaultSource
-from IPython.testing.plugin.dtexample import ipfunc
+from . import NONE, ERROR, IGNORE, ctx, ContextMixin, Source, SourceError, DefaultSource
 
 
 __all__ = [
@@ -291,6 +290,24 @@ class Field(CreatedCountMixin, ContextMixin):
             self.src = self.name
         return self
 
+    @property
+    def nesting(self):
+        fields, cur = [], self.parent
+        while cur and isinstance(cur, Field):
+            if cur in fields:
+                raise RuntimeError('Nesting {0} cycle {1}'.format(cur, fields))
+            fields.append(cur)
+            cur = cur.parent
+        return fields[::-1]
+
+    @property
+    def src_path(self):
+        path = self.ctx.src.path()
+        for field in self.nesting:
+            path.push(field.src)
+        path.push(self.src)
+        return path
+
     def is_attached(self):
         return self.parent is not None
 
@@ -336,17 +353,17 @@ class Field(CreatedCountMixin, ContextMixin):
             path = self.resolve()
         else:
             path = self._resolve()
-        if path is None:
-            return path
         if path is NONE:
-            return self._default()
+            return NONE
+        if path.is_null:
+            return None
         try:
             if self.parse:
                 value = self.parse(path)
             else:
                 value = self._parse(path)
             return value
-        except ValueError, ex:
+        except (SourceError, ValueError), ex:
             self.ctx.errors.invalid(str(ex))
             return ERROR
 
@@ -355,6 +372,8 @@ class Field(CreatedCountMixin, ContextMixin):
         Resolves this fields `src` with `ctx.src`. The return value is passed
         to `_parse`.
         """
+        if self.ctx.src is None:
+            return NONE
         if not self.ctx.src_path.exists:
             return NONE
         return self.ctx.src_path
@@ -400,6 +419,37 @@ class Field(CreatedCountMixin, ContextMixin):
             return self.default()
         return self.default
 
+    def _map(self, value=NONE):
+        if value is NONE:
+            # compute
+            if self.compute:
+                value = self.compute()
+            else:
+                value = self._compute()
+            if value is NONE:
+                return self._default()
+            if value in IGNORE:
+                return value
+
+        # munge
+        value = self._munge(value)
+        if value not in IGNORE and self.munge:
+            value = self.munge(value)
+        if value is NONE:
+            return self._default()
+        if value in IGNORE:
+            return value
+
+        # filter
+        if not self._filter(value) or (self.filter and not self.filter(value)):
+            return self._default()
+
+        # validate
+        if not self._validate(value) or (self.validate and not self.validate(value)):
+            return ERROR
+
+        return value
+
     def __call__(self, value=NONE):
         """
         Executes the steps used to "map" this fields value from `ctx.src` to a
@@ -413,42 +463,20 @@ class Field(CreatedCountMixin, ContextMixin):
             - ERROR if the field was present in `ctx.src` but invalid.
 
         """
-        with self.ctx(field=self):
-            if not hasattr(self.ctx, 'src_path'):
-                return self._default()
-            try:
-                if self.src not in (NONE, None):
-                    self.ctx.src_path.push(self.src)
-
-                if value is NONE:
-                    # compute
-                    if self.compute:
-                        value = self.compute()
-                    else:
-                        value = self._compute()
-                    if value in IGNORE:
-                        return value
-
-                # munge
-                value = self._munge(value)
-                if value not in IGNORE and self.munge:
-                    value = self.munge(value)
-                if value is NONE:
-                    return self._default()
-                if value in IGNORE:
-                    return value
-
-                # filter
-                if not self._filter(value) or (self.filter and not self.filter(value)):
-                    return self._default()
-
-                # validate
-                if not self._validate(value) or (self.validate and not self.validate(value)):
-                    return ERROR
-                return value
-            finally:
-                if self.src not in (NONE, None):
-                    self.ctx.src_path.pop()
+        if getattr(self.ctx, 'field', None) is not self:
+            if self.ctx.src:
+                with self.ctx(field=self, src_path=self.src_path):
+                    mapped = self._map(value)
+            else:
+                with self.ctx(field=self, src_path=None):
+                    mapped = self._map(value)
+        else:
+            if self.src in (None, NONE):
+                mapped = self._map(value)
+            else:
+                with self.ctx.src_path.push(self.src):
+                    mapped = self._map(value)
+        return mapped
 
     def __get__(self, form, form_type=None):
         if form is None:
@@ -521,8 +549,8 @@ class String(Field):
 
         return self.munge.attach(self)(munge)
 
-    def _parse(self, value):
-        return self.ctx.src_path.primitive(basestring)
+    def _parse(self, path):
+        return path.primitive(basestring)
 
     def _validate(self, value):
         if not super(String, self)._validate(value):
@@ -602,7 +630,8 @@ class Integer(Number):
             value = path.primitive(basestring)
             m = pattern_re.match(value)
             if not m:
-                raise ValueError('{} does not match pattern "{}"'.format(
+                raise ValueError(
+                    '{0} does not match pattern "{1}"'.format(
                     value, pattern_re.pattern
                 ))
             return int(m.group(0))
@@ -626,7 +655,7 @@ class Float(Number):
             value = path.primitive(basestring)
             m = pattern_re.match(value)
             if not m:
-                raise ValueError('{} does not match pattern "{}"'.format(
+                raise ValueError('{0} does not match pattern "{1}"'.format(
                     value, pattern_re.pattern
                 ))
             return int(m.group(0))
@@ -717,7 +746,7 @@ class Tuple(Field):
             return ERROR
         value = []
         for i in xrange(length):
-            with self.ctx.src_path.push(i):
+            with self.ctx.src_path.push(i), self.ctx(field=self.fields[i]):
                 item = self.fields[i]()
                 if item in IGNORE:
                     continue
@@ -745,14 +774,14 @@ class List(Field):
         return self.min(l).max(r)
 
     def _compute(self):
-        if not self.ctx.src_path.exists:
+        if self.ctx.src_path is None or not self.ctx.src_path.exists:
             return self._default()
         length = self.ctx.src_path.sequence()
         if length is NONE:
             return self._default()
         value = []
         for i in xrange(length):
-            with self.ctx.src_path.push(i):
+            with self.ctx.src_path.push(i), self.ctx(field=self.field):
                 item = self.field()
                 if item in IGNORE:
                     continue
@@ -796,12 +825,14 @@ class Dict(Field):
         mapping = {}
         for key in keys:
             with self.ctx.src_path.push(key):
-                value = self.value_field()
-                if value in IGNORE:
-                    continue
-                key = self.key_field(key)
-                if key in IGNORE:
-                    continue
+                with self.ctx(field=self.value_field):
+                    value = self.value_field()
+                    if value in IGNORE:
+                        continue
+                with self.ctx(field=self.key_field):
+                    key = self.key_field(key)
+                    if key in IGNORE:
+                        continue
                 mapping[key] = value
         return mapping
 
@@ -944,7 +975,8 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             if src is None and self.ctx.src is not None:
                 for field in type(self).fields:
                     try:
-                        field.__get__(self, type(self))
+                        with self.ctx(field=field):
+                            field.__get__(self, type(self))
                     except FieldError:
                         pass
                 return self
@@ -962,7 +994,8 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                     if tags and not tags & set(field.tags):
                         continue
                     try:
-                        field.__get__(self, type(self))
+                        with self.ctx(field=field):
+                            field.__get__(self, type(self))
                     except FieldError:
                         pass
                 return self.ctx.errors

@@ -15,17 +15,17 @@ class ConfigPath(Path):
         self.section = src.section
         self.parts = []
         if src.section:
-            self.root = SectionMapping(src.config, src.section)
+            self.root = SectionMapping(src.config, src.section, src.defaults)
         else:
-            self.root = Mapping(src.config)
+            self.root = Mapping(src.config, src.defaults)
 
     @property
     def value(self):
         if not self.parts:
             return self.root
         try:
-            value = self.root[self.parts[0]]
-            for part in self.parts[1:]:
+            value = self.root
+            for part in self.parts:
                 if isinstance(value, basestring):
                     value = Sequence(value)
                 value = value[part]
@@ -82,10 +82,11 @@ class Sequence(collections.Sequence):
 
 class SectionMapping(collections.Mapping):
 
-    def __init__(self, config, section):
+    def __init__(self, config, section, defaults):
         self.config = config
         self.section = section
         pattern = r'(?P<name>\w+)\[(?P<key>\w+)\]'
+        self.defaults = defaults
         self.sub_mappings = collections.defaultdict(dict)
         for option, value in self.config.items(section):
             m = re.match(pattern, option)
@@ -98,13 +99,15 @@ class SectionMapping(collections.Mapping):
             return self.sub_mappings[key]
         if self.config.has_option(self.section, key):
             return self.config.get(self.section, key)
+        if key in self.defaults:
+            return self.defaults[key]
         raise KeyError(key)
 
     def __iter__(self):
         for k, v in self.sub_mappings.iteritems():
-            yield k, v
+            yield k
         for k, v in self.config.items(self.section):
-            yield k, v
+            yield k
 
     def __len__(self):
         return len(self.sub_mappings) + len(self.config.options(self.section))
@@ -112,18 +115,18 @@ class SectionMapping(collections.Mapping):
 
 class Mapping(collections.Mapping):
 
-    def __init__(self, config, section=None):
+    def __init__(self, config, defaults=None):
         self.config = config
-        self.section = section
+        self.defaults = defaults
 
     def __getitem__(self, key):
         if not self.config.has_section(key):
             raise KeyError(key)
-        return SectionMapping(self.config, key)
+        return SectionMapping(self.config, key, self.defaults.get(key, None))
 
     def __iter__(self):
         for section in self.config.sections():
-            yield section, SectionMapping(self.config, section)
+            yield section
 
     def __len__(self):
         return len(self.config.sections())
@@ -131,11 +134,12 @@ class Mapping(collections.Mapping):
 
 class ConfigSource(Source, ParserMixin):
 
-    def __init__(self, config, section=None, location=None):
+    def __init__(self, config, section=None, location=None, defaults=None):
         super(ConfigSource, self).__init__()
         self.config = config
         self.section = section
         self.location = location
+        self.defaults = defaults
 
     # Source
 
