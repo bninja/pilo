@@ -786,7 +786,10 @@ class List(Field):
             return self._default()
         value = []
         for i in xrange(length):
-            with self.ctx.src_path.push(i), self.ctx(field=self.field):
+            with contextlib.nested(
+                    self.ctx.src_path.push(i),
+                    self.ctx(field=self.field)
+                ):
                 item = self.field()
                 if item in IGNORE:
                     continue
