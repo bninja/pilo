@@ -46,8 +46,19 @@ from datetime import datetime
 import decimal
 import inspect
 import re
+import weakref
 
-from . import NONE, ERROR, IGNORE, ctx, ContextMixin, Source, SourceError, DefaultSource
+try:
+    import iso8601
+except ImportError:
+    pass
+
+from . import (
+    NONE, NOT_SET, ERROR, IGNORE,
+    ctx, ContextMixin, DummyClose,
+    Source, SourceError,
+    DefaultSource,
+)
 
 
 __all__ = [
@@ -78,7 +89,7 @@ class Missing(FieldError):
 
     def __init__(self, field):
         super(Missing, self).__init__(
-            '{0}'.format(field.ctx.src_path), field,
+            '{0} - missing'.format(field.ctx.src_path), field,
         )
 
 
@@ -262,7 +273,7 @@ class Field(CreatedCountMixin, ContextMixin):
 
     """
 
-    def __init__(self, src=NONE, nullable=NONE, default=NONE, ignore=None, translate=None):
+    def __init__(self, src=NONE, nullable=NONE, default=NOT_SET, optional=False, ignore=None, translate=None):
         super(Field, self).__init__()
         self.compute = Hook(self, inspect.getargspec(self._compute))
         self.resolve = Hook(self, inspect.getargspec(self._resolve))
@@ -271,6 +282,8 @@ class Field(CreatedCountMixin, ContextMixin):
         self.filter = Hook(self, inspect.getargspec(self._filter))
         self.validate = Hook(self, inspect.getargspec(self._validate))
         self.src = src
+        if optional:
+            default = NONE
         self.default = default
         if nullable is NONE and self.default is None:
             self.nullable = True
@@ -287,6 +300,7 @@ class Field(CreatedCountMixin, ContextMixin):
             '{0}={1}'.format(k, v) for k, v in [
             ('name', self.name),
             ('src', self.src),
+            ('parent', self.parent),
         ])
         return '{0}({1})'.format(type(self).__name__, attrs)
 
@@ -296,38 +310,18 @@ class Field(CreatedCountMixin, ContextMixin):
             self.src = self.name
         return self
 
-    @property
-    def nesting(self):
-        fields, cur = [], self.parent
-        while cur and isinstance(cur, Field):
-            if cur in fields:
-                raise RuntimeError('Nesting {0} cycle {1}'.format(cur, fields))
-            fields.append(cur)
-            cur = cur.parent
-        return fields[::-1]
-
-    @property
-    def src_path(self):
-        path = self.ctx.src.path()
-        for src in [field.src for field in self.nesting] + [self.src]:
-            if src in (None, NONE):
-                continue
-            path.push(src)
-        return path
-
     def is_attached(self):
         return self.parent is not None
 
     def from_context(self):
 
-        def compute(self):
-            try:
-                return reduce(getattr, self.src.split('.'), self.ctx)
-            except AttributeError, ex:
-                self.ctx.errors.invalid(str(ex))
-                return ERROR
+        def resolve(self):
+            return contextlib.nested(
+                self.ctx(src=DefaultSource(self.ctx)),
+                self.ctx(src=self.src),
+            )
 
-        self.compute.attach(self)(compute)
+        self.resolve.attach(self)(resolve)
         return self
 
     def constant(self, value):
@@ -335,7 +329,7 @@ class Field(CreatedCountMixin, ContextMixin):
         def compute(self):
             return value
 
-        return self.compute(compute)
+        return self.compute.attach(self)(compute)
 
     def ignore(self, *args):
         self.ignores.extend(args)
@@ -354,21 +348,17 @@ class Field(CreatedCountMixin, ContextMixin):
 
     def _compute(self):
         """
-        Resolves and parses this fields `src` from `ctx.src`.
+        Processes this fields `src` from `ctx.src`.
         """
-        if self.resolve:
-            path = self.resolve()
-        else:
-            path = self._resolve()
-        if path is NONE:
+        if not self.ctx.src_path.exists:
             return NONE
-        if path.is_null:
+        if self.ctx.src_path.is_null:
             return None
         try:
             if self.parse:
-                value = self.parse(path)
+                value = self.parse(self.ctx.src_path)
             else:
-                value = self._parse(path)
+                value = self._parse(self.ctx.src_path)
             return value
         except (SourceError, ValueError), ex:
             self.ctx.errors.invalid(str(ex))
@@ -376,14 +366,11 @@ class Field(CreatedCountMixin, ContextMixin):
 
     def _resolve(self):
         """
-        Resolves this fields `src` with `ctx.src`. The return value is passed
-        to `_parse`.
+        Resolves this fields `src` with `ctx.src`.
         """
-        if self.ctx.src is None:
-            return NONE
-        if not self.ctx.src_path.exists:
-            return NONE
-        return self.ctx.src_path
+        if self.src in (None, NONE):
+            return None
+        return self.ctx(src=self.src)
 
     def _parse(self, path):
         """
@@ -419,15 +406,24 @@ class Field(CreatedCountMixin, ContextMixin):
         return value
 
     def _default(self):
-        if self.default is NONE:
+        if self.default is NOT_SET:
             self.ctx.errors.missing()
-            return ERROR
+        if self.default in IGNORE:
+            return self.default
         if isinstance(self.default, type):
             return self.default()
         return self.default
 
     def _map(self, value=NONE):
-        if value is NONE:
+        # resolve
+        if self.resolve:
+            close = self.resolve()
+        else:
+            close = self._resolve()
+        if close is None:
+            close = DummyClose()
+
+        with close:
             # compute
             if self.compute:
                 value = self.compute()
@@ -438,26 +434,26 @@ class Field(CreatedCountMixin, ContextMixin):
             if value in IGNORE:
                 return value
 
-        # munge
-        value = self._munge(value)
-        if value not in IGNORE and self.munge:
-            value = self.munge(value)
-        if value is NONE:
-            return self._default()
-        if value in IGNORE:
-            return value
+            # munge
+            value = self._munge(value)
+            if value not in IGNORE and self.munge:
+                value = self.munge(value)
+            if value is NONE:
+                return self._default()
+            if value in IGNORE:
+                return value
 
-        # filter
-        if not self._filter(value) or (self.filter and not self.filter(value)):
-            return self._default()
+            # filter
+            if not self._filter(value) or (self.filter and not self.filter(value)):
+                return self._default()
 
-        # validate
-        if not self._validate(value) or (self.validate and not self.validate(value)):
-            return ERROR
+            # validate
+            if not self._validate(value) or (self.validate and not self.validate(value)):
+                return ERROR
 
         return value
 
-    def __call__(self, value=NONE):
+    def map(self, value=NONE):
         """
         Executes the steps used to "map" this fields value from `ctx.src` to a
         value.
@@ -466,33 +462,40 @@ class Field(CreatedCountMixin, ContextMixin):
 
         :return: The successfully mapped value or:
 
-            - MISSING if none was not found
+            - NONE if one was not found
             - ERROR if the field was present in `ctx.src` but invalid.
 
         """
-        if getattr(self.ctx, 'field', None) is not self:
-            if self.ctx.src:
-                with self.ctx(field=self, src_path=self.src_path):
-                    mapped = self._map(value)
-            else:
-                with self.ctx(field=self, src_path=None):
-                    mapped = self._map(value)
-        else:
-            if self.src in (None, NONE):
-                mapped = self._map(value)
-            else:
-                with self.ctx.src_path.push(self.src):
-                    mapped = self._map(value)
-        return mapped
+        with self.ctx(field=self, parent=self):
+            return self._map(value)
+
+    def __call__(self, value=NONE):
+        """
+        Aliases map.
+        """
+        return self.map(value)
 
     def __get__(self, form, form_type=None):
         if form is None:
             return self
-        if self.name in form:
+        if not self.compute and self.name in form:
             return form[self.name]
-        value = self()
+        if getattr(self.ctx, 'form', None) is None:
+            with self.ctx(form=form, parent=form, src=DefaultSource({})):
+                value = self()
+        else:
+            if form is not getattr(self.ctx, 'parent', None):
+                is_form = lambda frame: getattr(frame, 'parent', None) is form
+                try:
+                    with self.ctx.rewind(is_form):
+                        return self()
+                except self.ctx.RewindDidNotStop:
+                    with self.ctx(form=form, parent=form, src=DefaultSource({})):
+                        value = self()
+            else:
+                value = self()
         if value in IGNORE:
-            raise FieldError(
+            raise AttributeError(
                 '"{0}" form cannot map field "{1}"'.format(form_type.__name__, self.name),
                 self,
             )
@@ -501,6 +504,13 @@ class Field(CreatedCountMixin, ContextMixin):
 
     def __set__(self, form, value):
         form[self.name] = value
+
+    def __delete__(self, form):
+        if form is None:
+            return
+        if self.name not in form:
+            return
+        del form[self.name]
 
 
 class String(Field):
@@ -533,11 +543,11 @@ class String(Field):
                 return ERROR
             return fmt.format(**values)
 
-        return self.compute(compute)
+        return self.compute.attach(self)(compute)
 
     def capture(self, pattern, name=None):
         """
-        Hooks munge to capture a value based in a regex pattern.
+        Hooks munge to capture a value based on a regex.
         """
 
         if isinstance(pattern, basestring):
@@ -646,7 +656,7 @@ class Integer(Number):
         return self.parse(parse)
 
     def _parse(self, path):
-        return ctx.src_path.primitive(int)
+        return path.primitive(int)
 
 
 Int = Integer
@@ -694,7 +704,7 @@ class Datetime(Field):
     def __init__(self, *args, **kwargs):
         self.after_value = kwargs.pop('after', None)
         self.before_value = kwargs.pop('before', None)
-        self.strptime_fmt = kwargs.pop('format')
+        self._format = kwargs.pop('format', None)
         super(Datetime, self).__init__(*args, **kwargs)
 
     def after(self, value):
@@ -708,13 +718,19 @@ class Datetime(Field):
     def between(self, l, r):
         return self.after(l).before(r)
 
-    def format(self, fmt):
-        self.strptime_fmt = fmt
+    def format(self, value):
+        self._format = value
         return self
 
     def _parse(self, path):
+        if isinstance(path.value, datetime):
+            return path.value
         value = path.primitive(basestring)
-        return datetime.strptime(value, self.strptime_fmt)
+        if self._format == 'iso8601':
+            parsed = iso8601.parse_date(value)
+        else:
+            parsed = datetime.strptime(value, self._format)
+        return parsed
 
     def _validate(self, value):
         if not super(Datetime, self)._validate(value):
@@ -740,12 +756,8 @@ class Tuple(Field):
         self.fields = fields
         super(Tuple, self).__init__(*args, **kwargs)
 
-    def _compute(self):
-        if not self.ctx.src_path.exists:
-            return self._default()
-        if self.ctx.src_path.is_null:
-            return None
-        length = self.ctx.src_path.sequence()
+    def _parse(self, path):
+        length = path.sequence()
         if length != len(self.fields):
             ctx.errors.invalid('Must have exactly {0} items'.format(
                 len(self.fields)
@@ -753,10 +765,7 @@ class Tuple(Field):
             return ERROR
         value = []
         for i in xrange(length):
-            with contextlib.nested(
-                    self.ctx.src_path.push(i),
-                    self.ctx(field=self.fields[i]),
-                ):
+            with self.ctx(src=i):
                 item = self.fields[i]()
                 if item in IGNORE:
                     continue
@@ -783,18 +792,11 @@ class List(Field):
     def range(self, l, r):
         return self.min(l).max(r)
 
-    def _compute(self):
-        if self.ctx.src_path is None or not self.ctx.src_path.exists:
-            return self._default()
-        length = self.ctx.src_path.sequence()
-        if length is NONE:
-            return self._default()
+    def _parse(self, path):
+        length = path.sequence()
         value = []
         for i in xrange(length):
-            with contextlib.nested(
-                    self.ctx.src_path.push(i),
-                    self.ctx(field=self.field)
-                ):
+            with self.ctx(src=i):
                 item = self.field()
                 if item in IGNORE:
                     continue
@@ -827,25 +829,19 @@ class Dict(Field):
         self.max_keys = kwargs.pop('max_keys', None)
         super(Dict, self).__init__(*args, **kwargs)
 
-    def _compute(self):
-        if not self.ctx.src_path.exists:
-            return self._default()
-        if self.ctx.src_path.is_null:
-            return None
-        keys = self.ctx.src_path.mapping()
+    def _parse(self, path):
+        keys = path.mapping()
         if keys is NONE:
             return self._default()
         mapping = {}
         for key in keys:
-            with self.ctx.src_path.push(key):
-                with self.ctx(field=self.value_field):
-                    value = self.value_field()
-                    if value in IGNORE:
-                        continue
-                with self.ctx(field=self.key_field):
-                    key = self.key_field(key)
-                    if key in IGNORE:
-                        continue
+            with self.ctx(src=key):
+                value = self.value_field()
+                if value in IGNORE:
+                    continue
+                key = self.key_field(key)
+                if key in IGNORE:
+                    continue
                 mapping[key] = value
         return mapping
 
@@ -874,9 +870,11 @@ class SubForm(Field):
         self.form_type = form_type
         super(SubForm, self).__init__(*args, **kwargs)
 
-    def _compute(self):
+    def _parse(self, path):
         form = self.form_type()
-        form()
+        errors = form.map()
+        if errors:
+            return ERROR
         return form
 
 
@@ -968,7 +966,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             if isinstance(args[0], Source):
                 src = args[0]
                 args = args[1:]
-            elif isinstance(args[0], dict):
+            else:
                 src = DefaultSource(args[0])
                 args = args[1:]
         elif kwargs:
@@ -976,24 +974,40 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             kwargs = {}
         dict.__init__(self, *args, **kwargs)
         if src:
-            errors = self(src)
+            errors = self.map(src)
             if errors:
                 raise errors[0]
 
-    def __call__(self, src=None, tags=None):
+    def _reset(self, tags):
+        for field in type(self).fields:
+            if tags and not tags & set(field.tags):
+                continue
+            try:
+                field.__delete__(self)
+            except FieldError:
+                pass
+
+    def _map(self, tags):
+        with self.ctx(form=self, parent=self):
+            for field in type(self).fields:
+                if tags and not tags & set(field.tags):
+                    continue
+                value = field()
+                if value not in IGNORE:
+                    self[field.name] = value
+
+    def map(self, src=None, tags=None, reset=False, error='collect'):
         tags = tags if tags else getattr(self.ctx, 'tags', None)
         if isinstance(tags, list):
             tags = set(tags)
-        with self.ctx(form=self):
-            if src is None and self.ctx.src is not None:
-                for field in type(self).fields:
-                    try:
-                        with self.ctx(field=field):
-                            field.__get__(self, type(self))
-                    except FieldError:
-                        pass
-                return self
-
+        if reset:
+            self._reset(tags)
+        if src is None and self.ctx.src is not None:
+            with self.ctx(errors=Errors()):
+                self._map(tags)
+                errors = self.ctx.errors
+            self.ctx.errors.extend(errors)
+        else:
             if src is None:
                 src = DefaultSource({})
             elif isinstance(src, dict):
@@ -1002,16 +1016,14 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 pass
             else:
                 raise ValueError('Invalid source, expected None, dict or Source')
-            with self.ctx(src=src, src_path=src.path(), errors=Errors()):
-                for field in type(self).fields:
-                    if tags and not tags & set(field.tags):
-                        continue
-                    try:
-                        with self.ctx(field=field):
-                            field.__get__(self, type(self))
-                    except FieldError:
-                        pass
-                return self.ctx.errors
+            with self.ctx(src=src, errors=Errors()):
+                self._map(tags)
+                errors = self.ctx.errors
+        if error == 'collect':
+            return errors
+        if errors:
+            raise errors[0]
+        return self
 
     def filter(self, *tags, **kwargs):
         inv = kwargs.get('inv', False)
@@ -1030,3 +1042,9 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 value = value.filter(*tags, **kwargs)
             form[field.name] = value
         return form
+
+    def copy(self):
+        dst = type(self)()
+        for k, v in self.iteritems():
+            dst[k] = v
+        return dst

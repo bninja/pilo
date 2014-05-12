@@ -1,8 +1,9 @@
 """
 """
-__version__ = '0.2.5'
+__version__ = '0.3.0'
 
 __all__ = [
+    'adapt',
     'NOT_SET',
     'NONE',
     'ERROR',
@@ -13,6 +14,7 @@ __all__ = [
     'Form',
     'Source',
     'SourceError',
+    'DefaultPath',
     'DefaultSource',
     'ParseError',
 ]
@@ -33,10 +35,10 @@ NONE = _Constant('NONE')
 
 ERROR = _Constant('ERROR')
 
-IGNORE = (NONE, ERROR)
+IGNORE = (NONE, ERROR, NOT_SET)
 
-from .context import ctx, ContextMixin
 from . import source
-from .source import Source, SourceError, DefaultSource
+from .source import Source, SourceError, DefaultPath, DefaultSource
+from .context import ctx, ContextMixin, DummyClose
 from . import fields
 from .fields import Field, FieldError, Form

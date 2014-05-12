@@ -17,11 +17,10 @@ and primitives (e.g. int, basestring, etc). But typically you will implement
 import collections
 import inspect
 
-from .. import ctx, ContextMixin, NONE
-from contextlib import contextmanager
+from .. import NONE, NOT_SET
 
 __all__ = [
-    'Error',
+    'SourceError',
     'Path',
     'Source',
     'DefaultSource',
@@ -43,58 +42,63 @@ class SourceError(Exception):
 class Path(collections.Sequence):
     """
     Represents a path to a `Field` within a `Source`.
+    
+    `src`
+    
+    `idx`
+    
+    `root`
+    
     """
 
-    def __init__(self, src):
+    def __init__(self, src, idx, root):
         self.src = src
+        self.idx = idx
+        self.root = root
 
     def __str__(self):
         parts = []
         if self:
             parts = ['{0}'.format(self[0])]
             for part in self[1:]:
-                if isinstance(part, int):
+                if isinstance(part, (int, long)):
                     part = '[{0}]'.format(part)
                 else:
                     part = '.' + part
                 parts.append(part)
         return ''.join(parts)
 
-    class close(object):
+    @property
+    def value(self):
+        for i, part in enumerate(reversed(self.idx)):
+            if part.value is not NOT_SET:
+                i, value = len(self.idx) - i, part.value
+                break
+        else:
+            i, value = 0, self.root
+        for part in self.idx[i:]:
+            value = part.value = self.resolve(value, part.key)
+            if value is NONE:
+                break
+        return value
 
-        def __init__(self, func):
-            self.func = func
+    def resolve(self, container, key):
+        raise NotImplementedError()
 
-        def __enter__(self):
-            pass
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.func()
-
-    def __copy__(self):
-        instance = type(self)(self.src)
-        for part in self:
-            instance.push(part)
-        return instance
-
-    # Path
+    @property
+    def name(self):
+        return self.idx[-1]
 
     @property
     def exists(self):
-        raise NotImplementedError()
+        return self.value is not NONE
 
     @property
     def is_null(self):
-        raise NotImplementedError()
+        return self.value is None
 
-    def push(self, name):
-        raise NotImplementedError()
-
-    def pop(self):
-        raise NotImplementedError()
-
-    def primitive(self, type=None):
-        return self.src.primitive(self, type)
+    def primitive(self, *types):
+        return self.src.primitive(self, *types)
 
     def sequence(self):
         return self.src.sequence(self)
@@ -104,8 +108,17 @@ class Path(collections.Sequence):
 
     # collections.Sequence
 
+    def __getitem__(self, key):
+        value = self.idx[key]
+        if not isinstance(key, slice):
+            return value.key
+        return [v.key for v in value]
 
-class Source(ContextMixin):
+    def __len__(self):
+        return len(self.idx)
+
+
+class Source(object):
     """
     Interface for creating paths and resolving them to primitives:
 
@@ -124,7 +137,7 @@ class Source(ContextMixin):
     #: Used to construct an error when resolving a path for this source fails.
     error = SourceError
 
-    def path(self):
+    def path(self, idx):
         """
         Constructs a root path for this source.
         """
@@ -142,7 +155,7 @@ class Source(ContextMixin):
         """
         raise NotImplementedError('{0} does not support sequences!'.format(type(self)))
 
-    def primitive(self, path, type=None):
+    def primitive(self, path, *types):
         """
         Resolves a path to a primitive within this source. If no type is given
         then it'll be inferred if possible.
@@ -215,6 +228,8 @@ class ParserMixin(object):
     }
 
     def parser(self, types, default=NONE):
+        if not types:
+            types = [None]
         if not isinstance(types, (tuple, list)):
             types = [types]
         for t in types:
@@ -226,9 +241,9 @@ class ParserMixin(object):
                     return self.parsers[t]
         if default is not NONE:
             return default
-        raise ValueError('No parser for type {0}'.format(t))
+        raise ValueError('No parser for type(s) {0}'.format(types))
 
 
-from .default import DefaultSource
+from .default import DefaultSource, DefaultPath
 from .configparser import ConfigSource
 from .json import JsonSource

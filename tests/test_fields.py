@@ -84,3 +84,86 @@ class TestForm(TestCase):
                 'field2': True,
             }
         }, form)
+
+
+    def test_rewind(self):
+
+        class MySubForm(pilo.Form):
+
+            link = pilo.fields.String().format('/my/{id}', id='id')
+
+            id = pilo.fields.Integer()
+
+
+        class MyForm(pilo.Form):
+
+            items = pilo.fields.List(pilo.fields.SubForm(MySubForm))
+
+            checksum = pilo.fields.String()
+
+        form = MyForm({
+            'items': [
+                {
+                    'id': 213123,
+                },
+                {
+                    'id': 567657,
+                },
+            ],
+            'checksum': '123123213',
+        })
+        self.assertEqual({
+            'items': [
+                {
+                    'link': '/my/213123',
+                    'id': 213123,
+                },
+                {
+                    'link': '/my/567657',
+                    'id': 567657,
+                },
+            ],
+            'checksum': '123123213',
+        }, form)
+
+
+    def test_clone(self):
+
+        class MySubForm(pilo.Form):
+
+            link = pilo.fields.String().format('/my/{id}', id='id')
+
+            id = pilo.fields.Integer()
+
+
+        class MyForm(pilo.Form):
+
+            items = pilo.fields.List(pilo.fields.SubForm(MySubForm))
+
+            checksum = pilo.fields.String()
+
+        form = MyForm({
+            'items': [
+                {
+                    'id': 213123,
+                },
+                {
+                    'id': 567657,
+                },
+            ],
+            'checksum': '123123213',
+        })
+        clone = MyForm(form)
+        self.assertEqual({
+            'items': [
+                {
+                    'link': '/my/213123',
+                    'id': 213123,
+                },
+                {
+                    'link': '/my/567657',
+                    'id': 567657,
+                },
+            ],
+            'checksum': '123123213',
+        }, clone)

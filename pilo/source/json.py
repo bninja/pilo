@@ -10,21 +10,11 @@ from . import Source, Path, NONE
 
 class JsonPath(Path):
 
-    def __init__(self, src, location=None):
-        super(JsonPath, self).__init__(src)
-        self.location = location
-        self.container = src.data
-        self.parts = []
+    # Path
 
-    @property
-    def value(self):
-        value = self.container
-        try:
-            for part in self:
-                value = value[part]
-        except (IndexError, KeyError, TypeError):
-            return NONE
-        return value
+    def __init__(self, src, idx, location=None):
+        super(JsonPath, self).__init__(src, idx, src.data)
+        self.location = location
 
     def __str__(self):
         value = super(JsonPath, self).__str__()
@@ -32,44 +22,27 @@ class JsonPath(Path):
             value = '{0}:{1}'.format(self.location, value)
         return value
 
-    # Path
-
-    @property
-    def exists(self):
-        return self.value is not NONE
-
-    @property
-    def is_null(self):
-        return self.value is None
-
-    def push(self, name):
-        self.parts.append(name)
-        return self.close(self.pop)
-
-    def pop(self):
-        self.parts.pop()
-
-    # collections.Sequence
-
-    def __getitem__(self, key):
-        return self.parts[key]
-
-    def __len__(self):
-        return len(self.parts)
+    def resolve(self, container, part):
+        try:
+            return container[part]
+        except (IndexError, KeyError, TypeError):
+            return NONE
 
 
 class JsonSource(Source):
 
-    def __init__(self, text, strict=False, location=None):
+    def __init__(self, text, encoding=None, strict=False, location=None):
         super(Source, self).__init__()
         self.strict = strict
         self.location = location
         self.text = text
-        self.data = json.loads(text)
+        self.data = json.loads(text, encoding=encoding)
 
     def as_string(self, field, value):
-        if not isinstance(value, basestring):
-            value = str(value)
+        if isinstance(value, basestring):
+            return value
+        if not self.strict:
+            return str(value)
         raise self.error(field, '{0} is not a string'.format(value))
 
     def as_int(self, field, value):
@@ -107,6 +80,8 @@ class JsonSource(Source):
     }
 
     def parser(self, types, default=NONE):
+        if not types:
+            types = [None]
         if not isinstance(types, (tuple, list)):
             types = [types]
         for t in types:
@@ -118,28 +93,22 @@ class JsonSource(Source):
                     return self.parsers[t]
         if default is not NONE:
             return default
-        raise ValueError('No parser for type {0}'.format(t))
+        raise ValueError('No parser for type(s) {0}'.format(types))
 
     # Source
 
-    def path(self):
-        return JsonPath(self, self.location)
+    def path(self, view):
+        return JsonPath(self, view, self.location)
 
     def sequence(self, path):
-        if path.name not in path.container:
-            return None
-        container = path.token[path.name]
-        if not isinstance(container, (list, tuple)):
+        if not isinstance(path.value, (list, tuple)):
             raise self.error(path, 'not a sequence')
-        return path
+        return len(path.value)
 
     def mapping(self, path):
-        if path.name not in path.container:
-            return None
-        value = path.token[path.name]
-        if not isinstance(value, (dict,)):
+        if not isinstance(path.value, (dict,)):
             raise self.error(path, 'not a mapping')
-        return path
+        return path.value.keys()
 
-    def primitive(self, path, type=None):
-        return self.parser(type)(self, path, path.value)
+    def primitive(self, path, *types):
+        return self.parser(types)(self, path, path.value)

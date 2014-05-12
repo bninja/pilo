@@ -5,45 +5,37 @@ from . import Source, Path, ParserMixin, NONE
 
 class DefaultPath(Path):
 
-    def __init__(self, src):
-        super(DefaultPath, self).__init__(src)
-        self.container = src.data
-        self.parts = []
-
-    @property
-    def value(self):
-        value = self.container
+    def _resolve(self, container, atom):
         try:
-            for part in self:
-                value = value[part]
+            return container[atom]
         except (IndexError, KeyError, TypeError):
-            return NONE
-        return value
+            try:
+                return getattr(container, atom)
+            except (AttributeError, TypeError):
+                return NONE
 
     # Path
 
-    @property
-    def exists(self):
-        return self.value is not NONE
+    def __init__(self, src, idx):
+        super(DefaultPath, self).__init__(src, idx, src.data)
 
-    @property
-    def is_null(self):
-        return self.value is None
+    def resolve(self, container, part):
+        if isinstance(part, basestring) and part.endswith('()'):
+            part = part[:-2]
+            value = self.resolve(container, part)
+            if value is NONE:
+                return NONE
+            return value()
 
-    def push(self, name):
-        self.parts.append(name)
-        return self.close(self.pop)
-
-    def pop(self):
-        self.parts.pop()
-
-    # collections.Sequence
-
-    def __getitem__(self, key):
-        return self.parts[key]
-
-    def __len__(self):
-        return len(self.parts)
+        if isinstance(part, basestring):
+            value = container
+            for part in part.split('.'):
+                value = self._resolve(value, part)
+                if value is NONE:
+                    break
+        else:
+            value = self._resolve(container, part)
+        return value
 
 
 class DefaultSource(Source, ParserMixin):
@@ -53,8 +45,8 @@ class DefaultSource(Source, ParserMixin):
 
     # Source
 
-    def path(self):
-        return DefaultPath(self)
+    def path(self, idx):
+        return DefaultPath(self, idx)
 
     def sequence(self, path):
         if not isinstance(path.value, (list, tuple)):
@@ -66,5 +58,5 @@ class DefaultSource(Source, ParserMixin):
             raise self.error(path, 'is not a mapping')
         return path.value.keys()
 
-    def primitive(self, path, type=None):
-        return self.parser(type)(self, path, path.value)
+    def primitive(self, path, *types):
+        return self.parser(types)(self, path, path.value)

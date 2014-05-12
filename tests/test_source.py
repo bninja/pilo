@@ -1,5 +1,7 @@
+from __future__ import with_statement
+
 from ConfigParser import ConfigParser
-import copy
+import contextlib
 import json
 from StringIO import StringIO
 
@@ -8,7 +10,18 @@ import pilo
 from . import TestCase
 
 
-class TestDefaultSource(TestCase):
+class TestSource(TestCase):
+
+    @contextlib.contextmanager
+    def push(self, view, part):
+        view.append(pilo.context.SourcePart(part))
+        try:
+            yield
+        finally:
+            view.pop()
+
+
+class TestDefaultSource(TestSource):
 
     def test_path(self):
         src = pilo.source.DefaultSource({
@@ -22,28 +35,29 @@ class TestDefaultSource(TestCase):
             'includes': ['/etc/slurp/conf.d/*.conf', '/etc/slurp/conf.d/*.py'],
         }})
 
+        view = []
         results = []
-        path = src.path()
-        results.append(copy.copy(path))
-        with path.push('slurp'):
-            results.append(copy.copy(path))
-            with path.push('includes'):
-                results.append(copy.copy(path))
-                with path.push(0):
-                    results.append(copy.copy(path))
-                with path.push(1):
-                    results.append(copy.copy(path))
-                with path.push(2):
-                    results.append(copy.copy(path))
-                with path.push('peep'):
-                    results.append(copy.copy(path))
-                results.append(copy.copy(path))
-            with path.push(2):
-                results.append(copy.copy(path))
-            with path.push('backfill'):
-                results.append(copy.copy(path))
-            with path.push('read_size'):
-                results.append(copy.copy(path))
+        path = src.path(view)
+        results.append((str(path), path.exists, path.is_null))
+        with self.push(view, 'slurp'):
+            results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 'includes'):
+                results.append((str(path), path.exists, path.is_null))
+                with self.push(view, 0):
+                    results.append((str(path), path.exists, path.is_null))
+                with self.push(view, 1):
+                    results.append((str(path), path.exists, path.is_null))
+                with self.push(view, 2):
+                    results.append((str(path), path.exists, path.is_null))
+                with self.push(view, 'peep'):
+                    results.append((str(path), path.exists, path.is_null))
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 2):
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 'backfill'):
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 'read_size'):
+                results.append((str(path), path.exists, path.is_null))
 
         self.maxDiff = None
         self.assertEqual([
@@ -58,10 +72,10 @@ class TestDefaultSource(TestCase):
             ('slurp[2]', False, False),
             ('slurp.backfill', True, False),
             ('slurp.read_size', True, False),
-        ], [(str(path), path.exists, path.is_null) for path in results])
+        ], [(path, exists, is_null) for path, exists, is_null in results])
 
 
-class TestConfigSource(TestCase):
+class TestConfigSource(TestSource):
 
     def test_path(self):
         config = ConfigParser()
@@ -76,27 +90,28 @@ includes = /etc/slurp/conf.d/*.conf /etc/slurp/conf.d/*.py
 """))
         src = pilo.source.ConfigSource(config)
 
+        view = []
         results = []
-        path = src.path()
-        results.append(copy.copy(path))
+        path = src.path(view)
+        results.append((str(path), path.exists, path.is_null))
 
-        with path.push('includes'):
-            results.append(copy.copy(path))
-            with path.push(0):
-                results.append(copy.copy(path))
-            with path.push(1):
-                results.append(copy.copy(path))
-            with path.push(2):
-                results.append(copy.copy(path))
-            with path.push('peep'):
-                results.append(copy.copy(path))
-            results.append(copy.copy(path))
-        with path.push(2):
-            results.append(copy.copy(path))
-        with path.push('backfill'):
-            results.append(copy.copy(path))
-        with path.push('read_size'):
-            results.append(copy.copy(path))
+        with self.push(view, 'includes'):
+            results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 0):
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 1):
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 2):
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 'peep'):
+                results.append((str(path), path.exists, path.is_null))
+            results.append((str(path), path.exists, path.is_null))
+        with self.push(view, 2):
+            results.append((str(path), path.exists, path.is_null))
+        with self.push(view, 'backfill'):
+            results.append((str(path), path.exists, path.is_null))
+        with self.push(view, 'read_size'):
+            results.append((str(path), path.exists, path.is_null))
 
         self.assertEqual([
             ('', True, False),
@@ -109,10 +124,10 @@ includes = /etc/slurp/conf.d/*.conf /etc/slurp/conf.d/*.py
             ('2', False, False),
             ('backfill', False, False),
             ('read_size', False, False)
-        ], [(str(path), path.exists, path.is_null) for path in results])
+        ], [(path, exists, is_null) for path, exists, is_null in results])
 
 
-class TestJsonSource(TestCase):
+class TestJsonSource(TestSource):
 
     def test_path(self):
         src = pilo.source.JsonSource(json.dumps({
@@ -126,29 +141,30 @@ class TestJsonSource(TestCase):
             'includes': ['/etc/slurp/conf.d/*.conf', '/etc/slurp/conf.d/*.py'],
         }}))
 
+        view = []
         results = []
-        path = src.path()
-        results.append(copy.copy(path))
+        path = src.path(view)
+        results.append((str(path), path.exists, path.is_null))
 
-        with path.push('slurp'):
-            results.append(copy.copy(path))
-            with path.push('includes'):
-                results.append(copy.copy(path))
-                with path.push(0):
-                    results.append(copy.copy(path))
-                with path.push(1):
-                    results.append(copy.copy(path))
-                with path.push(2):
-                    results.append(copy.copy(path))
-                with path.push('peep'):
-                    results.append(copy.copy(path))
-                results.append(copy.copy(path))
-            with path.push(2):
-                results.append(copy.copy(path))
-            with path.push('backfill'):
-                results.append(copy.copy(path))
-            with path.push('read_size'):
-                results.append(copy.copy(path))
+        with self.push(view, 'slurp'):
+            results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 'includes'):
+                results.append((str(path), path.exists, path.is_null))
+                with self.push(view, 0):
+                    results.append((str(path), path.exists, path.is_null))
+                with self.push(view, 1):
+                    results.append((str(path), path.exists, path.is_null))
+                with self.push(view, 2):
+                    results.append((str(path), path.exists, path.is_null))
+                with self.push(view, 'peep'):
+                    results.append((str(path), path.exists, path.is_null))
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 2):
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 'backfill'):
+                results.append((str(path), path.exists, path.is_null))
+            with self.push(view, 'read_size'):
+                results.append((str(path), path.exists, path.is_null))
 
         self.assertEqual([
             ('', True, False),
@@ -162,4 +178,4 @@ class TestJsonSource(TestCase):
             ('slurp[2]', False, False),
             ('slurp.backfill', True, False),
             ('slurp.read_size', True, False)
-        ], [(str(path), path.exists, path.is_null) for path in results])
+        ], [(path, exists, is_null) for path, exists, is_null in results])

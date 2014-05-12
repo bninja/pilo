@@ -9,29 +9,16 @@ from . import Source, Path, ParserMixin, NONE
 
 class ConfigPath(Path):
 
-    def __init__(self, src):
-        super(ConfigPath, self).__init__(src)
+    # Path
+
+    def __init__(self, src, idx):
+        if src.section:
+            root = SectionMapping(src.config, src.section, src.defaults)
+        else:
+            root = Mapping(src.config, src.defaults)
+        super(ConfigPath, self).__init__(src, idx, root)
         self.location = src.location
         self.section = src.section
-        self.parts = []
-        if src.section:
-            self.root = SectionMapping(src.config, src.section, src.defaults)
-        else:
-            self.root = Mapping(src.config, src.defaults)
-
-    @property
-    def value(self):
-        if not self.parts:
-            return self.root
-        try:
-            value = self.root
-            for part in self.parts:
-                if isinstance(value, basestring):
-                    value = Sequence(value)
-                value = value[part]
-        except (KeyError, IndexError, TypeError):
-            return NONE
-        return value
 
     def __str__(self):
         parts = []
@@ -42,30 +29,13 @@ class ConfigPath(Path):
         parts.append(super(ConfigPath, self).__str__())
         return ':'.join(parts)
 
-    # Path
-
-    @property
-    def exists(self):
-        return self.value is not NONE
-
-    @property
-    def is_null(self):
-        return self.value is None
-
-    def push(self, name):
-        self.parts.append(name)
-        return self.close(self.pop)
-
-    def pop(self):
-        self.parts.pop()
-
-    # collections.Sequence
-
-    def __getitem__(self, key):
-        return self.parts[key]
-
-    def __len__(self):
-        return len(self.parts)
+    def resolve(self, container, part):
+        try:
+            if isinstance(container, basestring):
+                container = Sequence(container)
+            return container[part]
+        except (KeyError, IndexError, TypeError):
+            return NONE
 
 
 class Sequence(collections.Sequence):
@@ -143,13 +113,11 @@ class ConfigSource(Source, ParserMixin):
 
     # Source
 
-    def path(self):
-        return ConfigPath(self)
+    def path(self, view):
+        return ConfigPath(self, view)
 
     def sequence(self, path):
         value = path.value
-        if value is NONE:
-            from ipdb import set_trace; set_trace()
         if isinstance(value, basestring):
             return len(Sequence(value))
         raise self.error(path, 'not a sequence')
@@ -159,5 +127,5 @@ class ConfigSource(Source, ParserMixin):
             return path.value.keys()
         raise self.error(path, 'not a mapping')
 
-    def primitive(self, path, type=None):
-        return self.parser(type)(self, path, path.value)
+    def primitive(self, path, *types):
+        return self.parser(types)(self, path, path.value)
