@@ -46,7 +46,6 @@ from datetime import datetime
 import decimal
 import inspect
 import re
-import weakref
 
 try:
     import iso8601
@@ -172,7 +171,9 @@ class Hook(object):
             return parent
 
         # invoke
-        target = self.target or self.parent.ctx.form
+        target = self.target
+        if target is None:
+            target = self.parent.ctx.form
         return self.func(target, *args, **kwargs)
 
 
@@ -416,23 +417,27 @@ class Field(CreatedCountMixin, ContextMixin):
 
     def _map(self, value=NONE):
         # resolve
-        if self.resolve:
-            close = self.resolve()
+        if value is NONE:
+            if self.resolve:
+                close = self.resolve()
+            else:
+                close = self._resolve()
+            if close is None:
+                close = DummyClose()
         else:
-            close = self._resolve()
-        if close is None:
             close = DummyClose()
 
         with close:
             # compute
-            if self.compute:
-                value = self.compute()
-            else:
-                value = self._compute()
             if value is NONE:
-                return self._default()
-            if value in IGNORE:
-                return value
+                if self.compute:
+                    value = self.compute()
+                else:
+                    value = self._compute()
+                if value is NONE:
+                    return self._default()
+                if value in IGNORE:
+                    return value
 
             # munge
             value = self._munge(value)
@@ -824,17 +829,24 @@ class Dict(Field):
 
     def __init__(self, key_field, value_field, *args, **kwargs):
         self.key_field = key_field.attach(self)
+        self.key_filter = Hook(self, inspect.getargspec(self._key_filter))
         self.value_field = value_field.attach(self)
         self.required_keys = kwargs.pop('required_keys', [])
         self.max_keys = kwargs.pop('max_keys', None)
         super(Dict, self).__init__(*args, **kwargs)
+
+    def _key_filter(self, key):
+        return True
 
     def _parse(self, path):
         keys = path.mapping()
         if keys is NONE:
             return self._default()
         mapping = {}
+        key_filter = self.key_filter if self.key_filter else self._key_filter
         for key in keys:
+            if not key_filter(key):
+                continue
             with self.ctx(src=key):
                 value = self.value_field()
                 if value in IGNORE:
@@ -868,11 +880,13 @@ class SubForm(Field):
 
     def __init__(self, form_type, *args, **kwargs):
         self.form_type = form_type
+        self.reset = kwargs.pop('reset', False)
+        self.unmapped = kwargs.pop('unmapped', 'ignore')
         super(SubForm, self).__init__(*args, **kwargs)
 
     def _parse(self, path):
         form = self.form_type()
-        errors = form.map()
+        errors = form.map(reset=self.reset, unmapped=self.unmapped)
         if errors:
             return ERROR
         return form
@@ -987,7 +1001,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             except FieldError:
                 pass
 
-    def _map(self, tags):
+    def _map(self, tags, unmapped):
         with self.ctx(form=self, parent=self):
             for field in type(self).fields:
                 if tags and not tags & set(field.tags):
@@ -995,8 +1009,30 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 value = field()
                 if value not in IGNORE:
                     self[field.name] = value
+        unmapped = self._unmapped(unmapped)
+        if unmapped is not None:
+            self.update(unmapped)
 
-    def map(self, src=None, tags=None, reset=False, error='collect'):
+    def _unmapped(self, directive):
+        if not directive:
+            return
+        if isinstance(directive, basestring):
+            if directive == 'capture':
+                directive = (String(), Field())
+            elif directive == 'ignore':
+                return
+            else:
+                raise ValueError(
+                    'unmapped="{}" invalid, should be "capture" or "ignore"'.format(directive)
+                )
+        if isinstance(directive, Field):
+            directive = (String(), directive)
+
+        dict_field = Dict(*directive)
+        dict_field.key_filter.attach(self)(lambda self, key: key not in self)
+        return dict_field.map()
+
+    def map(self, src=None, tags=None, reset=False, unmapped='ignore', error='collect'):
         tags = tags if tags else getattr(self.ctx, 'tags', None)
         if isinstance(tags, list):
             tags = set(tags)
@@ -1004,7 +1040,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             self._reset(tags)
         if src is None and self.ctx.src is not None:
             with self.ctx(errors=Errors()):
-                self._map(tags)
+                self._map(tags, unmapped)
                 errors = self.ctx.errors
             self.ctx.errors.extend(errors)
         else:
@@ -1017,7 +1053,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             else:
                 raise ValueError('Invalid source, expected None, dict or Source')
             with self.ctx(src=src, errors=Errors()):
-                self._map(tags)
+                self._map(tags, unmapped)
                 errors = self.ctx.errors
         if error == 'collect':
             return errors

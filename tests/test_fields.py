@@ -167,3 +167,93 @@ class TestForm(TestCase):
             ],
             'checksum': '123123213',
         }, clone)
+
+    def test_unmapped(self):
+
+        class MySubForm(pilo.Form):
+
+            za = pilo.fields.Float()
+
+
+        class MyForm(pilo.Form):
+
+            z = pilo.fields.SubForm(MySubForm, unmapped='capture')
+
+            a = pilo.fields.String()
+
+            @a.munge
+            def a(self, value):
+                return value[::-1]
+
+            b = pilo.fields.Integer()
+
+            @b.munge
+            def b(self, value):
+                return value * 100
+
+        src = {
+            'a': 'aeee',
+            'b': 1,
+            'c': {
+                'cc': [1, 2, 3, 4]
+            },
+            'd': 'blah',
+            'e': ['a', 'b', 'c'],
+            'f': 123.23,
+            'z': {
+                'za': 123132.123,
+                'zb': '',
+                'zc': 12312,
+                'zd': {
+                    'zba': 12312,
+                },
+            }
+        }
+
+        expected_ignored = {
+            'a': 'eeea',
+            'b': 100,
+            'z': {
+                'za': 123132.123,
+                'zb': '',
+                'zc': 12312,
+                'zd': {
+                    'zba': 12312,
+                },
+            }
+        }
+
+        expected_captured = {
+            'a': 'eeea',
+            'b': 100,
+            'c': {
+                'cc': [1, 2, 3, 4]
+            },
+            'd': 'blah',
+            'e': ['a', 'b', 'c'],
+            'f': 123.23,
+            'z': {
+                'za': 123132.123,
+                'zb': '',
+                'zc': 12312,
+                'zd': {
+                    'zba': 12312,
+                },
+            }
+        }
+
+        form = MyForm().map(src, unmapped='ignore', error='raise')
+        self.assertEqual(expected_ignored, form)
+
+        form = MyForm().map(src, unmapped='capture', error='raise')
+        self.assertEqual(expected_captured, form)
+
+        form = MyForm().map(src, unmapped=pilo.fields.Field(), error='raise')
+        self.assertEqual(expected_captured, form)
+
+        form = MyForm().map(
+            src,
+            unmapped=(pilo.fields.String(), pilo.fields.Field()),
+            error='raise',
+        )
+        self.assertEqual(expected_captured, form)
