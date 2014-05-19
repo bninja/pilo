@@ -411,7 +411,7 @@ class Field(CreatedCountMixin, ContextMixin):
             self.ctx.errors.missing()
         if self.default in IGNORE:
             return self.default
-        if isinstance(self.default, type):
+        if isinstance(self.default, type) or callable(self.default):
             return self.default()
         return self.default
 
@@ -851,10 +851,10 @@ class Dict(Field):
                 value = self.value_field()
                 if value in IGNORE:
                     continue
-                key = self.key_field(key)
-                if key in IGNORE:
-                    continue
-                mapping[key] = value
+            key = self.key_field(key)
+            if key in IGNORE:
+                continue
+            mapping[key] = value
         return mapping
 
     def _validate(self, value):
@@ -1061,23 +1061,26 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             raise errors[0]
         return self
 
-    def filter(self, *tags, **kwargs):
-        inv = kwargs.get('inv', False)
+    def munge(self, func):
         form = type(self)()
         for field in type(self).fields:
-            if field.name not in self:
-                continue
-            if inv:
-                if any(field.has_tag(tag) for tag in tags):
-                    continue
-            else:
-                if not any(field.has_tag(tag) for tag in tags):
-                    continue
-            value = self[field.name]
+            value = func(form, field, self.get(field.name, NONE))
+            if value is not NONE:
+                form[field.name] = value
             if isinstance(value, Form):
-                value = value.filter(*tags, **kwargs)
-            form[field.name] = value
+                value = value.munge(func)
         return form
+
+    def filter(self, *tags, **kwargs):
+        inv = kwargs.get('inv', False)
+
+        def munge(form, field, value):
+            hit = any(field.has_tag(tag) for tag in tags)
+            if inv:
+                hit = not hit
+            return value if hit else NONE
+
+        return self.munge(munge)
 
     def copy(self):
         dst = type(self)()

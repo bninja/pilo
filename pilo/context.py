@@ -92,16 +92,16 @@ class SourcePart(object):
 class Context(threading.local):
     """
     Used to manage variables and source paths with these reserved attributes:
-    
+
     `src`
         TODO
-    
+
     `src_path`
         TODO
-        
+
     `src_idx`
-        TODO 
-    
+        TODO
+
     You should never need to create this, just use the `ctx` global.
     """
 
@@ -143,14 +143,14 @@ class Context(threading.local):
     def rewind(self, stop):
         """
         Used if you need to rewind stack to a particular frame.
-        
+
         :param predicate: Callable used to stop unwind, e.g.:
-        
+
             .. code::
-            
+
                 def stop(frame):
                     return True
-        
+
         :return: A context object used to restore the stack.
         """
         for i, frame in enumerate(reversed(self.stack)):

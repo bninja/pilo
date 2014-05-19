@@ -33,7 +33,7 @@ class ConfigPath(Path):
         try:
             if isinstance(container, basestring):
                 container = Sequence(container)
-            return container[part]
+            return container[part.key]
         except (KeyError, IndexError, TypeError):
             return NONE
 

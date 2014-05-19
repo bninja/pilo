@@ -42,13 +42,13 @@ class SourceError(Exception):
 class Path(collections.Sequence):
     """
     Represents a path to a `Field` within a `Source`.
-    
+
     `src`
-    
+
     `idx`
-    
+
     `root`
-    
+
     """
 
     def __init__(self, src, idx, root):
@@ -77,12 +77,12 @@ class Path(collections.Sequence):
         else:
             i, value = 0, self.root
         for part in self.idx[i:]:
-            value = part.value = self.resolve(value, part.key)
+            value = part.value = self.resolve(value, part)
             if value is NONE:
                 break
         return value
 
-    def resolve(self, container, key):
+    def resolve(self, container, part):
         raise NotImplementedError()
 
     @property
@@ -245,5 +245,5 @@ class ParserMixin(object):
 
 
 from .default import DefaultSource, DefaultPath
-from .configparser import ConfigSource
-from .json import JsonSource
+from .configparser import ConfigSource, ConfigPath
+from .json import JsonSource, JsonPath

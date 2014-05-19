@@ -24,7 +24,7 @@ class JsonPath(Path):
 
     def resolve(self, container, part):
         try:
-            return container[part]
+            return container[part.key]
         except (IndexError, KeyError, TypeError):
             return NONE
 

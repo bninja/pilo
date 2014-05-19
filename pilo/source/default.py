@@ -1,5 +1,7 @@
 """
 """
+import copy
+
 from . import Source, Path, ParserMixin, NONE
 
 
@@ -20,21 +22,22 @@ class DefaultPath(Path):
         super(DefaultPath, self).__init__(src, idx, src.data)
 
     def resolve(self, container, part):
-        if isinstance(part, basestring) and part.endswith('()'):
-            part = part[:-2]
+        if isinstance(part.key, basestring) and part.key.endswith('()'):
+            part = copy.copy(part)
+            part.key = part.key[:-2]
             value = self.resolve(container, part)
             if value is NONE:
                 return NONE
             return value()
 
-        if isinstance(part, basestring):
+        if isinstance(part.key, basestring):
             value = container
-            for part in part.split('.'):
-                value = self._resolve(value, part)
+            for atom in part.key.split('.'):
+                value = self._resolve(value, atom)
                 if value is NONE:
                     break
         else:
-            value = self._resolve(container, part)
+            value = self._resolve(container, part.key)
         return value
 
 
