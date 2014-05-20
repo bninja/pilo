@@ -914,9 +914,9 @@ class FormMeta(type):
         is_field = lambda x: isinstance(x, Field)
         fields = []
         for name, attr in inspect.getmembers(cls, is_field):
-            attr.attach(cls, name)
+            if not attr.is_attached():
+                attr.attach(cls, name)
             fields.append(attr)
-            continue
         fields.sort(key=lambda x: x._count)
         cls.fields = fields
         return cls
