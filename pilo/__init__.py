@@ -79,10 +79,13 @@ class Identities(dict):
     def __getitem__(self, key):
         return dict.__getitem__(self, key)
 
-    def probe(self, src):
+    def probe(self, src, default=NONE):
         if not isinstance(src, (dict, Source)):
-            raise TypeError('Expected dict or Source')
+            raise ValueError('Expected dict or Source')
         probe = self.Probe()
         errors = probe.map(src)
         if not errors:
             return probe.id
+        if default in IGNORE:
+            raise errors[0]
+        return default

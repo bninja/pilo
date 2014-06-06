@@ -3,6 +3,7 @@
 import collections
 import re
 import shlex
+import textwrap
 
 from . import Source, Path, ParserMixin, NONE
 
@@ -104,12 +105,38 @@ class Mapping(collections.Mapping):
 
 class ConfigSource(Source, ParserMixin):
 
-    def __init__(self, config, section=None, location=None, defaults=None):
+    def __init__(self,
+                 config,
+                 section=None,
+                 location=None,
+                 defaults=None,
+                 preserve_whitespace=False
+        ):
         super(ConfigSource, self).__init__()
+        if preserve_whitespace and location is None:
+            raise ValueError('preserve white-space=True without location')
         self.config = config
         self.section = section
         self.location = location
         self.defaults = defaults
+        self.preserve_whitespace = preserve_whitespace
+
+    def as_raw(self, path):
+        option = path[-1]
+        lines = []
+        with open(self.location, 'r') as fo:
+            section_header = '[{0}]'.format(self.section)
+            for line in fo:
+                if line.strip() == section_header:
+                    break
+            for line in fo:
+                if line.strip().startswith(option):
+                    break
+            for line in fo:
+                if line and not line[0].isspace():
+                    break
+                lines.append(line)
+        return textwrap.dedent(''.join(lines))
 
     # Source
 
@@ -128,4 +155,12 @@ class ConfigSource(Source, ParserMixin):
         raise self.error(path, 'not a mapping')
 
     def primitive(self, path, *types):
-        return self.parser(types)(self, path, path.value)
+        value = self.parser(types)(self, path, path.value)
+
+        # preserve white-space for mulit-line strings
+        if (self.preserve_whitespace and
+            isinstance(value, basestring) and
+            value.count('\n') > 0):
+            value = self.as_raw(path)
+
+        return value

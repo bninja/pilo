@@ -44,6 +44,7 @@ This defines `Form` and the `Field`s use to build them. Use it like:
 import contextlib
 from datetime import datetime
 import decimal
+import imp
 import inspect
 import re
 
@@ -733,8 +734,11 @@ class Datetime(Field):
         value = path.primitive(basestring)
         if self._format == 'iso8601':
             parsed = iso8601.parse_date(value)
-        else:
+        elif self._format != None:
             parsed = datetime.strptime(value, self._format)
+        else:
+            ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+            return ERROR
         return parsed
 
     def _validate(self, value):
@@ -874,6 +878,69 @@ class Dict(Field):
                 ))
                 return False
         return True
+
+
+class Code(Field):
+
+    pattern = re.compile('(?:(?P<module>[\w\.]+):)?(?P<attr>[\w\.]+)')
+
+    @classmethod
+    def inline_match(cls, value):
+        return value.count('\n') > 0
+
+    @classmethod
+    def import_match(cls, value):
+        match = cls.pattern.match(value)
+        if not match:
+            return False
+        return match.group('module'), match.group('attr')
+
+    @classmethod
+    def load(cls, name, attr):
+        module = __import__(name)
+        try:
+            obj = reduce(getattr, attr.split('.'), module)
+        except AttributeError:
+            raise TypeError('Unable to resolve {0}.{1}\n'.format(
+                module.__name__, attr
+            ))
+        return obj
+
+    @classmethod
+    def compile(cls, name, code, **code_globals):
+        module = imp.new_module('<{0}>'.format(name))
+        module.__dict__.update(code_globals)
+        exec code in module.__dict__
+        return module
+
+    def _parse(self, path):
+        value = super(Code, self)._parse(path)
+        if value in IGNORE:
+            return value
+
+        # in-line
+        if self.inline_match(value):
+            try:
+                return self.compile(self.name, value)
+            except Exception, ex:
+                self.ctx.errors.invalid(str(ex))
+                return ERROR
+
+        # import
+        match = self.import_match(value)
+        if match:
+            name, attr = match
+            try:
+                return self.load(name, attr)
+            except Exception, ex:
+                self.ctx.errors.invalid(str(ex))
+                return ERROR
+
+        self.ctx.errors.invalid(
+            '"{0}" does not match import pattern "{1}" and is not a code block'.format(
+            value, self.pattern.pattern
+        ))
+        return ERROR
 
 
 class SubForm(Field):
