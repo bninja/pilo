@@ -49,6 +49,7 @@ import imp
 import inspect
 import re
 import time
+import uuid
 
 try:
     import iso8601
@@ -56,10 +57,7 @@ except ImportError:
     pass
 
 from . import (
-    NONE, NOT_SET, ERROR, IGNORE,
-    ctx, ContextMixin, Close,
-    Source, SourceError,
-    DefaultSource,
+    NONE, NOT_SET, ERROR, IGNORE, ctx, ContextMixin, Close, Source, SourceError, DefaultSource, Types,
 )
 
 
@@ -1045,6 +1043,52 @@ class Code(Field):
         return ERROR
 
 
+class UUID(Field):
+
+    def _parse(self, path):
+        value = self.ctx.src_path.primitive()
+        if isinstance(value, uuid.UUID):
+            return value
+        return uuid.UUID(self.ctx.src_path.primitive(basestring))
+
+
+class Type(String):
+    """
+    """
+
+    @classmethod
+    def abstract(cls):
+        return cls()
+
+    @classmethod
+    def instance(cls, value):
+        return cls(default=value)
+
+    def __init__(self, *args, **kwargs):
+        self.types = None
+        super(Type, self).__init__(*args, **kwargs)
+
+    def probe(self, value):
+        if not self.types:
+            self.types = Types.map(self)
+        return self.types.probe(value)
+
+    def _validate(self, value):
+        if not super(Type, self)._validate(value):
+            return False
+        if self.default is None:
+            return True
+        if self.default in IGNORE:
+            ctx.errors.invalid('{0} is abstract'.format(self))
+            return False
+        if value != self.default:
+            ctx.errors.invalid(
+                '{0} {1} != expected {2}'.format(self, value, self.default)
+            )
+            return False
+        return True
+
+
 class SubForm(Field):
 
     def __init__(self, form_type, *args, **kwargs):
@@ -1055,6 +1099,36 @@ class SubForm(Field):
 
     def _parse(self, path):
         form = self.form_type()
+        errors = form.map(reset=self.reset, unmapped=self.unmapped)
+        if errors:
+            return ERROR
+        return form
+
+
+class PolymorphicSubForm(Field):
+
+    def __init__(self, type_field, *args, **kwargs):
+        self.type_field = type_field
+        self.reset = kwargs.pop('reset', False)
+        self.unmapped = kwargs.pop('unmapped', 'ignore')
+        super(PolymorphicSubForm, self).__init__(*args, **kwargs)
+
+    def _form_type(self, path):
+        try:
+            identity = self.type_field.probe(path.value)
+        except ValueError, ex:
+            self.ctx.invalid(str(ex))
+            return ERROR
+        if identity not in self.type_field.types:
+            self.ctx.invalid('invalid identity {}'.format(identity))
+            return ERROR
+        return self.type_field.types[identity]
+
+    def _parse(self, path):
+        form_type = self._form_type(path)
+        if form_type in IGNORE:
+            return form_type
+        form = form_type()
         errors = form.map(reset=self.reset, unmapped=self.unmapped)
         if errors:
             return ERROR

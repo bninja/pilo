@@ -28,3 +28,9 @@ class TestCase(unittest.TestCase):
     def read_fixture(cls, *path):
         return cls.open_fixture(*path).read()
 
+
+
+class TestInterface(TestCase):
+
+    def test_all(self):
+        from pilo import *
