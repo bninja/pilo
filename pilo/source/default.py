@@ -8,13 +8,35 @@ from . import Source, Path, ParserMixin, NONE
 class DefaultPath(Path):
 
     def _resolve(self, container, atom):
+        value = self._as_item(container, atom)
+        if value is not NONE:
+            return value
+        value = self._as_alias(container, atom)
+        if value is not NONE:
+            return value
+        return self._as_attr(container, atom)
+
+    def _as_item(self, container, atom):
         try:
             return container[atom]
         except (IndexError, KeyError, TypeError):
+            return NONE
+
+    def _as_alias(self, container, atom):
+        if (self.src.aliases and
+            atom in self.src.aliases and
+            len(self.idx) == 1):
+            alias = self.src.aliases[atom]
+            return self._as_item(container, alias)
+        return NONE
+
+    def _as_attr(self, container, atom):
+        if isinstance(atom, basestring):
             try:
                 return getattr(container, atom)
             except (AttributeError, TypeError):
                 return NONE
+        return NONE
 
     # Path
 
@@ -43,8 +65,9 @@ class DefaultPath(Path):
 
 class DefaultSource(Source, ParserMixin):
 
-    def __init__(self, data):
+    def __init__(self, data, aliases=None):
         self.data = data
+        self.aliases = aliases
 
     # Source
 

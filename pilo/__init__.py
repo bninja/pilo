@@ -41,7 +41,7 @@ IGNORE = (NONE, ERROR, NOT_SET)
 
 from . import source
 from .source import Source, SourceError, DefaultPath, DefaultSource
-from .context import ctx, ContextMixin, DummyClose
+from .context import ctx, ContextMixin, Close
 from . import fields
 from .fields import Field, FieldError, Form
 
@@ -67,25 +67,34 @@ class Identities(dict):
         if not field.is_attached:
             raise ValueError('{} is not attached'.format(field))
 
-        identities = cls(field)
+        identities = cls.for_field(field)
         _map(field.parent)
         return identities
 
-    def __init__(self, field):
-        self.Probe = type(
-            'Probe', (Form,), {'id': type(field)(field.src, default=None)}
-        )
+    @classmethod
+    def for_field(cls, id_field):
+        fields = {}
+        for field in id_field.parent.fields:
+            fields[field.name] = type(field)(field.src, default=None)
+            if field is id_field:
+                break
+        else:
+            raise ValueError('No {0} in {1}'.format(id_field, id_field.parent))
+        probe_form = type('Probe', (Form,), fields)
+        return cls(probe_form, id_field)
+
+    def __init__(self, probe_form, id_field):
+        self.probe_form = probe_form
+        self.id_field = id_field
 
     def __getitem__(self, key):
         return dict.__getitem__(self, key)
 
     def probe(self, src, default=NONE):
-        if not isinstance(src, (dict, Source)):
-            raise ValueError('Expected dict or Source')
-        probe = self.Probe()
+        probe = self.probe_form()
         errors = probe.map(src)
         if not errors:
-            return probe.id
+            return getattr(probe, self.id_field.name)
         if default in IGNORE:
             raise errors[0]
         return default

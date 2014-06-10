@@ -42,11 +42,13 @@ This defines `Form` and the `Field`s use to build them. Use it like:
 
 """
 import contextlib
-from datetime import datetime
+import copy
+from datetime import datetime, date
 import decimal
 import imp
 import inspect
 import re
+import time
 
 try:
     import iso8601
@@ -55,7 +57,7 @@ except ImportError:
 
 from . import (
     NONE, NOT_SET, ERROR, IGNORE,
-    ctx, ContextMixin, DummyClose,
+    ctx, ContextMixin, Close,
     Source, SourceError,
     DefaultSource,
 )
@@ -310,10 +312,23 @@ class Field(CreatedCountMixin, ContextMixin):
         self.parent, self.name = parent, name
         if self.src is NONE:
             self.src = self.name
+        if inspect.isclass(parent) and issubclass(parent, Form):
+            for base in inspect.getmro(parent)[1:]:
+                if (not hasattr(base, self.name) or
+                    not isinstance(getattr(base, self.name), Field)):
+                    continue
+                self._count = getattr(base, self.name)._count
+                break
         return self
 
+    @property
     def is_attached(self):
         return self.parent is not None
+
+    def clone(self):
+        other = copy.copy(self)
+        other.parent = None
+        return other
 
     def from_context(self):
 
@@ -331,7 +346,11 @@ class Field(CreatedCountMixin, ContextMixin):
         def compute(self):
             return value
 
-        return self.compute.attach(self)(compute)
+        if not self.is_attached:
+            return self.compute.attach(self)(compute)
+        other = self.clone()
+        other.compute = Hook(other, inspect.getargspec(other._compute))
+        return other.compute.attach(other)(compute)
 
     def ignore(self, *args):
         self.ignores.extend(args)
@@ -352,15 +371,16 @@ class Field(CreatedCountMixin, ContextMixin):
         """
         Processes this fields `src` from `ctx.src`.
         """
-        if not self.ctx.src_path.exists:
+        src_path = self.ctx.src_path
+        if not src_path.exists:
             return NONE
-        if self.ctx.src_path.is_null:
+        if src_path.is_null:
             return None
         try:
             if self.parse:
-                value = self.parse(self.ctx.src_path)
+                value = self.parse(src_path)
             else:
-                value = self._parse(self.ctx.src_path)
+                value = self._parse(src_path)
             return value
         except (SourceError, ValueError), ex:
             self.ctx.errors.invalid(str(ex))
@@ -418,15 +438,14 @@ class Field(CreatedCountMixin, ContextMixin):
 
     def _map(self, value=NONE):
         # resolve
+        close = Close.dummy
         if value is NONE:
             if self.resolve:
                 close = self.resolve()
             else:
                 close = self._resolve()
             if close is None:
-                close = DummyClose()
-        else:
-            close = DummyClose()
+                close = Close.dummy
 
         with close:
             # compute
@@ -475,11 +494,8 @@ class Field(CreatedCountMixin, ContextMixin):
         with self.ctx(field=self, parent=self):
             return self._map(value)
 
-    def __call__(self, value=NONE):
-        """
-        Aliases map.
-        """
-        return self.map(value)
+    #: Alias for `map`.
+    __call__ = map
 
     def __get__(self, form, form_type=None):
         if form is None:
@@ -522,8 +538,12 @@ class Field(CreatedCountMixin, ContextMixin):
 class String(Field):
 
     def __init__(self, *args, **kwargs):
-        self.min_length = kwargs.pop('min_length', None)
-        self.max_length = kwargs.pop('max_length', None)
+        length = kwargs.pop('length', None)
+        if length:
+            self.max_length = self.min_length = length
+        else:
+            self.min_length = kwargs.pop('min_length', None)
+            self.max_length = kwargs.pop('max_length', None)
         pattern = kwargs.pop('pattern', None)
         if pattern:
             if isinstance(pattern, basestring):
@@ -705,13 +725,7 @@ class Boolean(Field):
 Bool = Boolean
 
 
-class Datetime(Field):
-
-    def __init__(self, *args, **kwargs):
-        self.after_value = kwargs.pop('after', None)
-        self.before_value = kwargs.pop('before', None)
-        self._format = kwargs.pop('format', None)
-        super(Datetime, self).__init__(*args, **kwargs)
+class RangeMixin(object):
 
     def after(self, value):
         self.after_value = value
@@ -724,7 +738,95 @@ class Datetime(Field):
     def between(self, l, r):
         return self.after(l).before(r)
 
+
+class Date(Field, RangeMixin):
+
+    def __init__(self, *args, **kwargs):
+        self.after_value = kwargs.pop('after', None)
+        self.before_value = kwargs.pop('before', None)
+        self._format = kwargs.pop('format', None)
+        super(Date, self).__init__(*args, **kwargs)
+
     def format(self, value):
+        if isinstance(value, date):
+            return value.strftime(self._format)
+        self._format = value
+        return self
+
+    def _parse(self, path):
+        if isinstance(path.value, date):
+            return path.value
+        value = path.primitive(basestring)
+        if self._format != None:
+            parsed = datetime.strptime(value, self._format).date()
+        else:
+            ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+            return ERROR
+        return parsed
+
+    def _validate(self, value):
+        if not super(Date, self)._validate(value):
+            return False
+        if value is not None:
+            if self.after_value is not None and value < self.after_value:
+                ctx.errors.invalid('Must be after {}'.format(self.after_value))
+                return False
+            if self.before_value is not None and value > self.before_value:
+                ctx.errors.invalid('Must be before {}'.format(self.before_value))
+                return False
+        return True
+
+
+class Time(Field, RangeMixin):
+
+    def __init__(self, *args, **kwargs):
+        self.after_value = kwargs.pop('after', None)
+        self.before_value = kwargs.pop('before', None)
+        self._format = kwargs.pop('format', None)
+        super(Time, self).__init__(*args, **kwargs)
+
+    def format(self, value):
+        if isinstance(value, time.struct_time):
+            return time.strftime(self._format, value)
+        self._format = value
+        return self
+
+    def _parse(self, path):
+        value = path.value
+        if isinstance(value, time.struct_time):
+            return value
+        value = path.primitive(basestring)
+        if self._format != None:
+            parsed = time.strptime(value, self._format)
+        else:
+            ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+            return ERROR
+        return parsed
+
+    def _validate(self, value):
+        if not super(Time, self)._validate(value):
+            return False
+        if value is not None:
+            if self.after_value is not None and value < self.after_value:
+                ctx.errors.invalid('Must be after {}'.format(self.after_value))
+                return False
+            if self.before_value is not None and value > self.before_value:
+                ctx.errors.invalid('Must be before {}'.format(self.before_value))
+                return False
+        return True
+
+
+class Datetime(Field, RangeMixin):
+
+    def __init__(self, *args, **kwargs):
+        self.after_value = kwargs.pop('after', None)
+        self.before_value = kwargs.pop('before', None)
+        self._format = kwargs.pop('format', None)
+        super(Datetime, self).__init__(*args, **kwargs)
+
+    def format(self, value):
+        if isinstance(value, date):
+            return value.strftime(self._format)
         self._format = value
         return self
 
@@ -981,7 +1083,7 @@ class FormMeta(type):
         is_field = lambda x: isinstance(x, Field)
         fields = []
         for name, attr in inspect.getmembers(cls, is_field):
-            if not attr.is_attached():
+            if not attr.is_attached:
                 attr.attach(cls, name)
             fields.append(attr)
         fields.sort(key=lambda x: x._count)
@@ -1048,7 +1150,15 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 src = args[0]
                 args = args[1:]
             else:
-                src = DefaultSource(args[0])
+                if isinstance(args[0], (list, tuple)):
+                    src = DefaultSource(
+                        args[0],
+                        aliases=dict(
+                            (field.name, i) for i, field in enumerate(self.fields)
+                        )
+                    )
+                else:
+                    src = DefaultSource(args[0])
                 args = args[1:]
         elif kwargs:
             src = DefaultSource(kwargs)
@@ -1115,6 +1225,13 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 src = DefaultSource({})
             elif isinstance(src, dict):
                 src = DefaultSource(src)
+            elif isinstance(src, (list, tuple)):
+                src = DefaultSource(
+                    src,
+                    aliases=dict(
+                        (field.name, i) for i, field in enumerate(self.fields)
+                    )
+                )
             elif isinstance(src, Source):
                 pass
             else:

@@ -24,32 +24,23 @@ and `Context` variables are are managed like:
             pass
 
 """
-import collections
 import functools
 import threading
 
 from . import Source, NOT_SET
 
 
-class Frame(collections.Container):
-
-    def __init__(self, **kwargs):
-        self._values = kwargs
+class Frame(dict):
 
     def __getattr__(self, k):
-        if k in self._values:
-            return self._values[k]
+        if k in self:
+            return self[k]
         raise AttributeError('"{0}" object has no attribute "{1}"'.format(
-            type(self).__name__, k
+            self.__class__.__name__, k
         ))
 
-    # collections.Container
 
-    def __contains__(self, k):
-        return k in self._values
-
-
-class DummyClose(object):
+class DummyContext(object):
 
     def __enter__(self):
         return self
@@ -59,6 +50,8 @@ class DummyClose(object):
 
 
 class Close(object):
+
+    dummy = DummyContext()
 
     def __init__(self, func):
         self.func = func
@@ -115,8 +108,8 @@ class Context(threading.local):
 
     def __getattr__(self, k):
         for frame in reversed(self.stack):
-            if hasattr(frame, k):
-                return getattr(frame, k)
+            if k in frame:
+                return frame[k]
         raise AttributeError('"{0}" object has no attribute "{1}"'.format(
             self.__class__.__name__, k
         ))
@@ -126,12 +119,6 @@ class Context(threading.local):
         Each value with name `k`.
         """
         return [getattr(frame, k) for frame in self.stack if hasattr(frame, k)]
-
-    def __call__(self, **kwargs):
-        """
-        Alias for `push`.
-        """
-        return self.push(**kwargs)
 
     def reset(self):
         """
@@ -180,6 +167,9 @@ class Context(threading.local):
                 self.src_idx.append(kwargs['src'])
         self.stack.append(Frame(**kwargs))
         return Close(self.restore)
+
+    #: Alias for `push`.
+    __call__ = push
 
     def restore(self, frames=None):
         """

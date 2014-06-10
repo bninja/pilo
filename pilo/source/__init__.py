@@ -70,16 +70,21 @@ class Path(collections.Sequence):
 
     @property
     def value(self):
+        if self.idx and self.idx[-1].value is not NOT_SET:
+            return self.idx[-1].value
+
         for i, part in enumerate(reversed(self.idx)):
             if part.value is not NOT_SET:
                 i, value = len(self.idx) - i, part.value
                 break
         else:
             i, value = 0, self.root
+
         for part in self.idx[i:]:
             value = part.value = self.resolve(value, part)
             if value is NONE:
                 break
+
         return value
 
     def resolve(self, container, part):
