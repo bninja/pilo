@@ -43,7 +43,7 @@ This defines `Form` and the `Field`s use to build them. Use it like:
 """
 import contextlib
 import copy
-from datetime import datetime, date
+import datetime
 import decimal
 import imp
 import inspect
@@ -746,17 +746,17 @@ class Date(Field, RangeMixin):
         super(Date, self).__init__(*args, **kwargs)
 
     def format(self, value):
-        if isinstance(value, date):
+        if isinstance(value, datetime.date):
             return value.strftime(self._format)
         self._format = value
         return self
 
     def _parse(self, path):
-        if isinstance(path.value, date):
+        if isinstance(path.value, datetime.date):
             return path.value
         value = path.primitive(basestring)
         if self._format != None:
-            parsed = datetime.strptime(value, self._format).date()
+            parsed = datetime.datetime.strptime(value, self._format).date()
         else:
             ctx.errors.invalid('Unknown format for value "{}"'.format(value))
             return ERROR
@@ -791,7 +791,7 @@ class Time(Field, RangeMixin):
 
     def _parse(self, path):
         value = path.value
-        if isinstance(value, time.struct_time):
+        if isinstance(value, (time.struct_time, datetime.time)):
             return value
         value = path.primitive(basestring)
         if self._format != None:
@@ -823,19 +823,19 @@ class Datetime(Field, RangeMixin):
         super(Datetime, self).__init__(*args, **kwargs)
 
     def format(self, value):
-        if isinstance(value, date):
+        if isinstance(value, datetime.date):
             return value.strftime(self._format)
         self._format = value
         return self
 
     def _parse(self, path):
-        if isinstance(path.value, datetime):
+        if isinstance(path.value, datetime.datetime):
             return path.value
         value = path.primitive(basestring)
         if self._format == 'iso8601':
             parsed = iso8601.parse_date(value)
         elif self._format != None:
-            parsed = datetime.strptime(value, self._format)
+            parsed = datetime.datetime.strptime(value, self._format)
         else:
             ctx.errors.invalid('Unknown format for value "{}"'.format(value))
             return ERROR
@@ -1068,6 +1068,12 @@ class Type(String):
         self.types = None
         super(Type, self).__init__(*args, **kwargs)
 
+    @property
+    def value(self):
+        if self.default in IGNORE:
+            raise TypeError('{0} is abstract'.format(self))
+        return self.default
+
     def probe(self, value):
         if not self.types:
             self.types = Types.map(self)
@@ -1090,6 +1096,10 @@ class Type(String):
 
 
 class SubForm(Field):
+
+    @classmethod
+    def from_fields(cls, **fields):
+        return cls(Form.from_fields(**fields))
 
     def __init__(self, form_type, *args, **kwargs):
         self.form_type = form_type
@@ -1215,6 +1225,10 @@ class Form(dict, CreatedCountMixin, ContextMixin):
     __metaclass__ = FormMeta
 
     fields = None
+
+    @classmethod
+    def from_fields(cls, **fields):
+        return type('AnonymousForm', (cls,), fields)
 
     def __init__(self, *args, **kwargs):
         CreatedCountMixin.__init__(self)
