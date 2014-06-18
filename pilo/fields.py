@@ -710,8 +710,12 @@ class Float(Number):
 class Decimal(Number):
 
     def _parse(self, path):
-        return path.primitive(decimal.Decimal)
-
+        if isinstance(path.value, decimal.Decimal):
+            return path.value
+        if isinstance(path.value, float):
+            return decimal.Decimal(path.value)
+        value = path.primitive(basestring)
+        return decimal.Decimal(value)
 
 
 class Boolean(Field):
