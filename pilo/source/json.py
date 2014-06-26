@@ -24,7 +24,12 @@ class JsonPath(Path):
 
     def resolve(self, container, part):
         try:
-            return container[part.key]
+            if not isinstance(part.key, basestring) or '.' not in part.key:
+                return container[part.key]
+            value = container
+            for atom in part.key.split('.'):
+                value = value[atom]
+            return value
         except (IndexError, KeyError, TypeError):
             return NONE
 

@@ -57,13 +57,17 @@ class Types(dict):
                 _map(sub_cls)
 
         if not isinstance(field, Field):
-            raise TypeError('Excepted field')
+            raise TypeError('Expected field not {}'.format(type(field)))
 
         if not field.is_attached:
             raise ValueError('{0} is not attached'.format(field))
 
         identities = cls.for_field(field)
-        _map(field.parent)
+
+        # XXX: should Field.__get__ write to ctx.errors?
+        with ctx(errors=fields.CollectErrors()):
+            _map(field.parent)
+
         return identities
 
     @classmethod

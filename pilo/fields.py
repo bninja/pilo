@@ -102,13 +102,29 @@ class Invalid(FieldError):
         self.violation = violation
 
 
-class Errors(list):
+class Errors(object):
+
+    def __call__(self, *ex):
+        raise NotImplementedError
 
     def missing(self):
-        self.append(Missing(ctx.field))
+        self(Missing(ctx.field))
 
     def invalid(self, violation):
-        self.append(Invalid(ctx.field, violation))
+        self(Invalid(ctx.field, violation))
+
+
+class RaiseErrors(list, Errors):
+
+    def __call__(self, *ex):
+        self.extend(ex)
+        raise ex[0]
+
+
+class CollectErrors(list, Errors):
+
+    def __call__(self, *ex):
+        self.extend(ex)
 
 
 class CreatedCountMixin(object):
@@ -275,7 +291,14 @@ class Field(CreatedCountMixin, ContextMixin):
 
     """
 
-    def __init__(self, src=NONE, nullable=NONE, default=NOT_SET, optional=False, ignore=None, translate=None):
+    def __init__(self,
+                 src=NONE,
+                 nullable=NONE,
+                 default=NOT_SET,
+                 optional=False,
+                 ignore=None,
+                 translate=None
+        ):
         super(Field, self).__init__()
         self.compute = Hook(self, inspect.getargspec(self._compute))
         self.resolve = Hook(self, inspect.getargspec(self._resolve))
@@ -1173,7 +1196,8 @@ class FormMeta(type):
         for name, attr in inspect.getmembers(cls, is_field):
             if not attr.is_attached:
                 attr.attach(cls, name)
-            fields.append(attr)
+            if attr not in fields:
+                fields.append(attr)
         fields.sort(key=lambda x: x._count)
         cls.fields = fields
         return cls
@@ -1308,7 +1332,8 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         if reset:
             self._reset(tags)
         if src is None and self.ctx.src is not None:
-            with self.ctx(errors=Errors()):
+            errors = (CollectErrors if error == 'collect' else RaiseErrors)()
+            with self.ctx(errors=errors):
                 self._map(tags, unmapped)
                 errors = self.ctx.errors
             self.ctx.errors.extend(errors)
@@ -1328,7 +1353,8 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 pass
             else:
                 raise ValueError('Invalid source, expected None, dict or Source')
-            with self.ctx(src=src, errors=Errors()):
+            errors = (CollectErrors if error == 'collect' else RaiseErrors)()
+            with self.ctx(src=src, errors=errors):
                 self._map(tags, unmapped)
                 errors = self.ctx.errors
         if error == 'collect':
