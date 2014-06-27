@@ -49,15 +49,16 @@ class Types(dict):
         def _map(form_cls):
             if not inspect.isabstract(object):
                 try:
-                    value = getattr(form_cls(), field.name)
-                    identities[value] = form_cls
+                    instance = getattr(form_cls, field.name)
+                    for value in instance.choices or []:
+                        identities[value] = form_cls
                 except AttributeError:
                     pass
             for sub_cls in form_cls.__subclasses__():
                 _map(sub_cls)
 
         if not isinstance(field, Field):
-            raise TypeError('Expected field not {}'.format(type(field)))
+            raise TypeError('Expected field not {0}'.format(type(field)))
 
         if not field.is_attached:
             raise ValueError('{0} is not attached'.format(field))

@@ -915,6 +915,7 @@ class List(Field):
         self.field = field.attach(self, None)
         self.min_length = kwargs.pop('min_length', None)
         self.max_length = kwargs.pop('max_length', None)
+        self.allow_field = kwargs.pop('allow_field', False)
         super(List, self).__init__(*args, **kwargs)
 
     def min(self, value):
@@ -929,14 +930,22 @@ class List(Field):
         return self.min(l).max(r)
 
     def _parse(self, path):
-        length = path.sequence()
-        value = []
-        for i in xrange(length):
-            with self.ctx(src=i):
-                item = self.field()
-                if item in IGNORE:
-                    continue
-                value.append(item)
+        try:
+            length = path.sequence()
+        except path.src.error:
+            if not self.allow_field:
+                raise
+            value = self.field()
+            if value not in IGNORE:
+                value = [value]
+        else:
+            value = []
+            for i in xrange(length):
+                with self.ctx(src=i):
+                    item = self.field()
+                    if item in IGNORE:
+                        continue
+                    value.append(item)
         return value
 
     def _validate(self, value):
@@ -1088,8 +1097,11 @@ class Type(String):
         return cls()
 
     @classmethod
-    def instance(cls, value):
-        return cls(default=value)
+    def instance(cls, *choices):
+        default = NONE
+        if len(choices) == 1:
+            default = choices[0]
+        return cls(default=default, choices=list(choices))
 
     def __init__(self, *args, **kwargs):
         self.types = None
@@ -1098,8 +1110,16 @@ class Type(String):
     @property
     def value(self):
         if self.default in IGNORE:
-            raise TypeError('{0} is abstract'.format(self))
+            if not self.choices:
+                raise TypeError('{0} is abstract'.format(self))
+            raise TypeError('{0} is polymorphic'.format(self))
         return self.default
+
+    def cast(self, value):
+        identity = self.probe(value)
+        if identity not in self.types:
+            raise ValueError('{0} value {1} invalid'.format(self, identity))
+        return self.types[identity]
 
     def probe(self, value):
         if not self.types:
@@ -1111,14 +1131,6 @@ class Type(String):
             return False
         if self.default is None:
             return True
-        if self.default in IGNORE:
-            ctx.errors.invalid('{0} is abstract'.format(self))
-            return False
-        if value != self.default:
-            ctx.errors.invalid(
-                '{0} {1} != expected {2}'.format(self, value, self.default)
-            )
-            return False
         return True
 
 
