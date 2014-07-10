@@ -8,6 +8,8 @@ from . import Source, Path, ParserMixin, NONE
 class DefaultPath(Path):
 
     def _resolve(self, container, atom):
+        if self.src.ignore(self):
+            return NONE
         value = self._as_item(container, atom)
         if value is not NONE:
             return value
@@ -65,9 +67,17 @@ class DefaultPath(Path):
 
 class DefaultSource(Source, ParserMixin):
 
-    def __init__(self, data, aliases=None):
+    def __init__(self, data, aliases=None, ignores=None):
         self.data = data
         self.aliases = aliases
+        self.ignores = None
+        if ignores:
+            self.ignores = [ignore.split('.') for ignore in ignores]
+
+    def ignore(self, path):
+        if not self.ignores:
+            return False
+        return [part for part in path] in self.ignores
 
     # Source
 

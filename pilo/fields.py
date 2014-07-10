@@ -108,10 +108,10 @@ class Errors(object):
         raise NotImplementedError
 
     def missing(self):
-        self(Missing(ctx.field))
+        return self(getattr(ctx, 'Missing', Missing)(ctx.field))
 
     def invalid(self, violation):
-        self(Invalid(ctx.field, violation))
+        return self(getattr(ctx, 'Invalid', Invalid)(ctx.field, violation))
 
 
 class RaiseErrors(list, Errors):
@@ -1337,6 +1337,36 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         dict_field.key_filter.attach(self)(lambda self, key: key not in self)
         return dict_field.map()
 
+    def _root_map(self, src, tags, unmapped, error):
+        if src is None:
+            src = DefaultSource({})
+        elif isinstance(src, dict):
+            src = DefaultSource(src)
+        elif isinstance(src, (list, tuple)):
+            src = DefaultSource(
+                src,
+                aliases=dict(
+                    (field.name, i) for i, field in enumerate(self.fields)
+                )
+            )
+        elif isinstance(src, Source):
+            pass
+        else:
+            raise ValueError('Invalid source, expected None, dict or Source')
+        errors = (CollectErrors if error == 'collect' else RaiseErrors)()
+        with self.ctx(src=src, errors=errors):
+            self._map(tags, unmapped)
+            errors = self.ctx.errors
+        return errors
+
+    def _nested_map(self, tags, unmapped, error):
+        errors = (CollectErrors if error == 'collect' else RaiseErrors)()
+        with self.ctx(errors=errors):
+            self._map(tags, unmapped)
+            errors = self.ctx.errors
+        self.ctx.errors.extend(errors)
+        return errors
+
     def map(self, src=None, tags=None, reset=False, unmapped='ignore', error='collect'):
         tags = tags if tags else getattr(self.ctx, 'tags', None)
         if isinstance(tags, list):
@@ -1344,31 +1374,9 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         if reset:
             self._reset(tags)
         if src is None and self.ctx.src is not None:
-            errors = (CollectErrors if error == 'collect' else RaiseErrors)()
-            with self.ctx(errors=errors):
-                self._map(tags, unmapped)
-                errors = self.ctx.errors
-            self.ctx.errors.extend(errors)
+            errors = self._nested_map(tags, unmapped, error)
         else:
-            if src is None:
-                src = DefaultSource({})
-            elif isinstance(src, dict):
-                src = DefaultSource(src)
-            elif isinstance(src, (list, tuple)):
-                src = DefaultSource(
-                    src,
-                    aliases=dict(
-                        (field.name, i) for i, field in enumerate(self.fields)
-                    )
-                )
-            elif isinstance(src, Source):
-                pass
-            else:
-                raise ValueError('Invalid source, expected None, dict or Source')
-            errors = (CollectErrors if error == 'collect' else RaiseErrors)()
-            with self.ctx(src=src, errors=errors):
-                self._map(tags, unmapped)
-                errors = self.ctx.errors
+            errors = self._root_map(src, tags, unmapped, error)
         if error == 'collect':
             return errors
         if errors:
