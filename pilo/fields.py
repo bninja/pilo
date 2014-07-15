@@ -50,6 +50,7 @@ import inspect
 import re
 import time
 import uuid
+import weakref
 
 try:
     import iso8601
@@ -291,34 +292,65 @@ class Field(CreatedCountMixin, ContextMixin):
 
     """
 
-    def __init__(self,
-                 src=NONE,
-                 nullable=NONE,
-                 default=NOT_SET,
-                 optional=False,
-                 ignore=None,
-                 translate=None
-        ):
+    def __init__(self, src=NONE, **options):
         super(Field, self).__init__()
+
+        # hooks
         self.compute = Hook(self, inspect.getargspec(self._compute))
         self.resolve = Hook(self, inspect.getargspec(self._resolve))
         self.parse = Hook(self, inspect.getargspec(self._parse))
         self.munge = Hook(self, inspect.getargspec(self._munge))
         self.filter = Hook(self, inspect.getargspec(self._filter))
         self.validate = Hook(self, inspect.getargspec(self._validate))
-        self.src = src
-        if optional:
-            default = NONE
-        self.default = default
-        if nullable is NONE and self.default is None:
-            self.nullable = True
-        else:
-            self.nullable = nullable
-        self.ignores = ignore or []
-        self.translations = translate or {}
+
+        # site
         self.parent = None
         self.name = None
+        self.src = src
+
+        # options
+        self.default = NOT_SET
+        self.nullable = NONE
+        self.ignores = []
+        self.translations = {}
         self.tags = []
+        self.attach_parent = False
+        self.options(**options)
+
+    def options(self,
+                nullable=NOT_SET,
+                default=NOT_SET,
+                optional=NOT_SET,
+                ignore=NOT_SET,
+                translate=NOT_SET,
+                attach_parent=NOT_SET,
+                tags=NOT_SET,
+        ):
+        if nullable is not NOT_SET:
+            self.nullable = nullable
+
+        if optional is not NOT_SET:
+            if optional:
+                self.default = None
+
+        if default is not NOT_SET:
+            self.default = default
+            if self.default is None:
+                self.nullable = True
+
+        if ignore is not NOT_SET:
+            self.ignore(ignore)
+
+        if translate is not NOT_SET:
+            self.translate(translate)
+
+        if attach_parent is not NOT_SET:
+            self.attach_parent = attach_parent
+
+        if tags is not NOT_SET:
+            self.tag(tags)
+
+        return self
 
     def __str__(self):
         attrs = ', '.join(
@@ -513,7 +545,13 @@ class Field(CreatedCountMixin, ContextMixin):
 
         """
         with self.ctx(field=self, parent=self):
-            return self._map(value)
+            value = self._map(value)
+        if self.attach_parent and value not in IGNORE:
+            if hasattr(self.ctx, 'parent'):
+                value.parent = weakref.proxy(self.ctx.parent)
+            else:
+                value.parent = None
+        return value
 
     #: Alias for `map`.
     __call__ = map
@@ -1166,10 +1204,10 @@ class PolymorphicSubForm(Field):
         try:
             identity = self.type_field.probe(path.value)
         except ValueError, ex:
-            self.ctx.invalid(str(ex))
+            self.ctx.errors.invalid(str(ex))
             return ERROR
         if identity not in self.type_field.types:
-            self.ctx.invalid('invalid identity {}'.format(identity))
+            self.ctx.errors.invalid('invalid identity {}'.format(identity))
             return ERROR
         return self.type_field.types[identity]
 
