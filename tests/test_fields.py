@@ -1,6 +1,10 @@
+import datetime
+import pprint
+import re
+
 import pilo
 
-from . import TestCase
+from tests import TestCase
 
 
 class TestForm(TestCase):
@@ -257,3 +261,36 @@ class TestForm(TestCase):
             error='raise',
         )
         self.assertEqual(expected_captured, form)
+
+    def test_group(self):
+
+        src = {
+            'a[in]': [1, 2, 3],
+            'a[!in]': [123, 34, 133],
+            'a.between': (23, 234),
+            'b[!=]': 'wings',
+            'c[>]': datetime.datetime.utcnow().isoformat(),
+        }
+
+        class MyForm(pilo.Form):
+
+            a = pilo.fields.Group(
+                ('a', pilo.fields.Integer()),
+                (re.compile('^a\[(?P<op>in|\!in)\]$'), pilo.fields.List(pilo.fields.Integer())),
+                (re.compile('^a\[(?P<op>\<|\>)]$'), pilo.fields.Integer()),
+                (re.compile('^a\.(?P<op>between)$'), pilo.fields.Tuple((pilo.fields.Integer(), pilo.fields.Integer()))),
+            )
+
+            b = pilo.fields.Group(
+                ('b', pilo.fields.String()),
+                (re.compile('^b\[(?P<op>=|\!=)]$'), pilo.fields.String()),
+            )
+
+            c = pilo.fields.Group(
+                ('c', pilo.fields.Datetime(format='iso8601')),
+                (re.compile('^c\[(?P<op>=|\!=\|\<|\>)]$'), pilo.fields.Datetime(format='iso8601')),
+            ).options(
+                default=lambda: [('c', None, datetime.datetime.utcnow())]
+            )
+
+        MyForm(src)

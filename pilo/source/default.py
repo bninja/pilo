@@ -55,11 +55,13 @@ class DefaultPath(Path):
             return value()
 
         if isinstance(part.key, basestring):
-            value = container
-            for atom in part.key.split('.'):
-                value = self._resolve(value, atom)
-                if value is NONE:
-                    break
+            value = self._resolve(container, part.key)
+            if value is NONE:
+                value = container
+                for atom in part.key.split('.'):
+                    value = self._resolve(value, atom)
+                    if value is NONE:
+                        break
         else:
             value = self._resolve(container, part.key)
         return value

@@ -195,6 +195,15 @@ class Hook(object):
         return self.func(target, *args, **kwargs)
 
 
+def pluck(args, match):
+    args = list(args)
+    for i, arg in enumerate(args):
+        if match(arg):
+            args.pop(i)
+            return args, arg
+    return args, None
+
+
 class Field(CreatedCountMixin, ContextMixin):
     """
     A field is used to "map" a value from a source to named value. As part of
@@ -288,7 +297,7 @@ class Field(CreatedCountMixin, ContextMixin):
         MyForm.peeps.
 
     `tags`
-        A list of strings to tag this field with.
+        A map of strings to tag this field with.
 
     """
 
@@ -313,7 +322,7 @@ class Field(CreatedCountMixin, ContextMixin):
         self.nullable = NONE
         self.ignores = []
         self.translations = {}
-        self.tags = []
+        self.tags = {}
         self.attach_parent = False
         self.options(**options)
 
@@ -331,7 +340,7 @@ class Field(CreatedCountMixin, ContextMixin):
 
         if optional is not NOT_SET:
             if optional:
-                self.default = None
+                self.default = NONE
 
         if default is not NOT_SET:
             self.default = default
@@ -416,8 +425,9 @@ class Field(CreatedCountMixin, ContextMixin):
     def has_tag(self, tag):
         return tag in self.tags
 
-    def tag(self, *tags):
-        self.tags.extend(tags)
+    def tag(self, *tags, **kwags):
+        self.tags.update(dict(zip(tags, [None] * len(tags))))
+        self.tags.update(kwags)
         return self
 
     def _compute(self):
@@ -468,7 +478,7 @@ class Field(CreatedCountMixin, ContextMixin):
         not, False.
         """
         if value is None and not self.nullable:
-            ctx.errors.invalid('not nullable')
+            self.ctx.errors.invalid('not nullable')
             return False
         return True
 
@@ -610,6 +620,7 @@ class String(Field):
             self.pattern_re = pattern
         else:
             self.pattern_re = None
+        self.alphabet = kwargs.pop('alphabet', None)
         self.choices = kwargs.pop('choices', None)
         super(String, self).__init__(*args, **kwargs)
 
@@ -659,6 +670,13 @@ class String(Field):
             return False
         if value is None:
             return True
+        if self.alphabet:
+            invalid = list(set(c for c in value if c not in self.alphabet))
+            if invalid:
+                self.ctx.errors.invalid(
+                    'has invalid characters "{}"'.format(''.join(invalid))
+                )
+                return False
         if (self.min_length is not None and len(value) < self.min_length):
             self.ctx.errors.invalid('"{}" must have length >= {}'.format(
                 value, self.min_length
@@ -710,12 +728,12 @@ class Number(Field):
             return False
         if value is not None:
             if self.min_value is not None and value < self.min_value:
-                ctx.errors.invalid('"{}" must be >= {}'.format(
+                self.ctx.errors.invalid('"{}" must be >= {}'.format(
                     value, self.min_value
                 ))
                 return False
             if self.max_value is not None and value > self.max_value:
-                ctx.errors.invalid('"{}" must be <= {}'.format(
+                self.ctx.errors.invalid('"{}" must be <= {}'.format(
                     value, self.max_value
                 ))
                 return False
@@ -812,7 +830,11 @@ class Date(Field, RangeMixin):
 
     def format(self, value):
         if isinstance(value, datetime.date):
-            return value.strftime(self._format)
+            if isinstance(self._format, (list, tuple)):
+                format = self._format[0]
+            else:
+                format = self._format
+            return value.strftime(format)
         self._format = value
         return self
 
@@ -820,22 +842,40 @@ class Date(Field, RangeMixin):
         if isinstance(path.value, datetime.date):
             return path.value
         value = path.primitive(basestring)
-        if self._format != None:
-            parsed = datetime.datetime.strptime(value, self._format).date()
-        else:
-            ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+        if not self._format:
+            self.ctx.errors.invalid('Unknown format for value "{}"'.format(value))
             return ERROR
-        return parsed
+        formats = (
+            self._format
+            if isinstance(self._format, (list, tuple))
+            else [self._format]
+        )
+        for i, spec in enumerate(formats):
+            if spec == 'iso8601':
+                try:
+                    return iso8601.parse_date(value).date()
+                except iso8601.ParseError, ex:
+                    if i == len(formats):
+                        self.ctx.errors.invalid(str(ex))
+                        return ERROR
+
+            else:
+                try:
+                    return datetime.datetime.strptime(value, spec).date()
+                except ValueError, ex:
+                    if i == len(formats):
+                        self.ctx.errors.invalid(str(ex))
+                        return ERROR
 
     def _validate(self, value):
         if not super(Date, self)._validate(value):
             return False
         if value is not None:
             if self.after_value is not None and value < self.after_value:
-                ctx.errors.invalid('Must be after {}'.format(self.after_value))
+                self.ctx.errors.invalid('Must be after {}'.format(self.after_value))
                 return False
             if self.before_value is not None and value > self.before_value:
-                ctx.errors.invalid('Must be before {}'.format(self.before_value))
+                self.ctx.errors.invalid('Must be before {}'.format(self.before_value))
                 return False
         return True
 
@@ -862,7 +902,7 @@ class Time(Field, RangeMixin):
         if self._format != None:
             parsed = time.strptime(value, self._format)
         else:
-            ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+            self.ctx.errors.invalid('Unknown format for value "{}"'.format(value))
             return ERROR
         return parsed
 
@@ -871,10 +911,10 @@ class Time(Field, RangeMixin):
             return False
         if value is not None:
             if self.after_value is not None and value < self.after_value:
-                ctx.errors.invalid('Must be after {}'.format(self.after_value))
+                self.ctx.errors.invalid('Must be after {}'.format(self.after_value))
                 return False
             if self.before_value is not None and value > self.before_value:
-                ctx.errors.invalid('Must be before {}'.format(self.before_value))
+                self.ctx.errors.invalid('Must be before {}'.format(self.before_value))
                 return False
         return True
 
@@ -898,11 +938,15 @@ class Datetime(Field, RangeMixin):
             return path.value
         value = path.primitive(basestring)
         if self._format == 'iso8601':
-            parsed = iso8601.parse_date(value)
+            try:
+                parsed = iso8601.parse_date(value)
+            except iso8601.ParseError, ex:
+                self.ctx.errors.invalid(str(ex))
+                return ERROR
         elif self._format != None:
             parsed = datetime.datetime.strptime(value, self._format)
         else:
-            ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+            self.ctx.errors.invalid('Unknown format for value "{}"'.format(value))
             return ERROR
         return parsed
 
@@ -911,36 +955,49 @@ class Datetime(Field, RangeMixin):
             return False
         if value is not None:
             if self.after_value is not None and value < self.after_value:
-                ctx.errors.invalid('Must be after {}'.format(self.after_value))
+                self.ctx.errors.invalid('Must be after {}'.format(self.after_value))
                 return False
             if self.before_value is not None and value > self.before_value:
-                ctx.errors.invalid('Must be before {}'.format(self.before_value))
+                self.ctx.errors.invalid('Must be before {}'.format(self.before_value))
                 return False
         return True
 
 
 class Tuple(Field):
 
-    def __init__(self, fields, *args, **kwargs):
-        if not isinstance(fields, (tuple, list)):
-            raise ValueError(
-               'Invalid fields "{0}" should be a sequence of {1} instances'
-               .format(fields, Field.__name__)
-            )
+    def __init__(self, *args, **kwargs):
+        fields = list(args)
+        args = []
+        if isinstance(fields[0], basestring):
+            args.append(fields.pop(0))
+        if len(fields) == 1:
+            fields = fields[0]
+        if not isinstance(fields, (list, tuple)):
+            raise TypeError('{0!r} is not a field sequence'.format(fields))
+        for field in fields:
+            if not isinstance(field, Field):
+                raise TypeError('{0:r} is not a field'.format(field))
+        self.allow_field = kwargs.pop('allow_field', False)
+        if self.allow_field and len(fields) > 1:
+            for field in fields[1:]:
+                if field.default is NOT_SET:
+                    raise ValueError(
+                       'allow_field=True but field {0!r} has no default'.format(field)
+                    )
         self.fields = fields
         super(Tuple, self).__init__(*args, **kwargs)
 
     def _parse(self, path):
         length = path.sequence()
         if length != len(self.fields):
-            ctx.errors.invalid('Must have exactly {0} items'.format(
+            self.ctx.errors.invalid('Must have exactly {0} items'.format(
                 len(self.fields)
             ))
             return ERROR
         value = []
         for i in xrange(length):
             with self.ctx(src=i):
-                item = self.fields[i]()
+                item = self.fields[i].map()
                 if item in IGNORE:
                     continue
                 value.append(item)
@@ -949,7 +1006,16 @@ class Tuple(Field):
 
 class List(Field):
 
-    def __init__(self, field, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        args = list(args)
+        for i, arg in enumerate(args):
+            if isinstance(arg, Field):
+                field = args.pop(i)
+                break
+        else:
+            if 'field' not in kwargs:
+                raise Exception('Missing field')
+            field = kwargs.pop('field')
         self.field = field.attach(self, None)
         self.min_length = kwargs.pop('min_length', None)
         self.max_length = kwargs.pop('max_length', None)
@@ -973,14 +1039,14 @@ class List(Field):
         except path.src.error:
             if not self.allow_field:
                 raise
-            value = self.field()
+            value = self.field.map()
             if value not in IGNORE:
                 value = [value]
         else:
             value = []
             for i in xrange(length):
                 with self.ctx(src=i):
-                    item = self.field()
+                    item = self.field.map()
                     if item in IGNORE:
                         continue
                     value.append(item)
@@ -991,12 +1057,12 @@ class List(Field):
             return False
         if value is not None:
             if self.min_length is not None and len(value) < self.min_length:
-                ctx.errors.invalid('Must have {} or more items'.format(
+                self.ctx.errors.invalid('Must have {} or more items'.format(
                     self.min_length
                 ))
                 return False
             if self.max_length is not None and len(value) > self.max_length:
-                ctx.errors.invalid('Must have {} or fewer items'.format(
+                self.ctx.errors.invalid('Must have {} or fewer items'.format(
                     self.max_length
                 ))
                 return False
@@ -1026,7 +1092,7 @@ class Dict(Field):
             if not key_filter(key):
                 continue
             with self.ctx(src=key):
-                value = self.value_field()
+                value = self.value_field.map()
                 if value in IGNORE:
                     continue
             key = self.key_field(key)
@@ -1178,11 +1244,24 @@ class SubForm(Field):
     def from_fields(cls, **fields):
         return cls(Form.from_fields(**fields))
 
-    def __init__(self, form_type, *args, **kwargs):
-        self.form_type = form_type
-        self.reset = kwargs.pop('reset', False)
-        self.unmapped = kwargs.pop('unmapped', 'ignore')
-        super(SubForm, self).__init__(*args, **kwargs)
+    def __init__(self, *args, **options):
+        args, self.form_type = pluck(
+            args, lambda arg: inspect.isclass(arg) and issubclass(arg, Form)
+        )
+        if self.form_type is NOT_SET:
+            raise Exception('Missing form_type')
+        self.reset = False
+        self.unmapped = 'ignore'
+        super(SubForm, self).__init__(*args, **options)
+
+    def options(self, reset=NOT_SET, unmapped=NOT_SET, flat=NOT_SET, **kwargs):
+        if reset is not NOT_SET:
+            self.reset = reset
+        if unmapped is not NOT_SET:
+            self.unmapped = unmapped
+        if flat is not NOT_SET and flat:
+            self.src = None
+        return super(SubForm, self).options(**kwargs)
 
     def _parse(self, path):
         form = self.form_type()
@@ -1220,6 +1299,91 @@ class PolymorphicSubForm(Field):
         if errors:
             return ERROR
         return form
+
+
+class Group(Field):
+
+    def __init__(self, *fields, **kwargs):
+
+        def _path(*parts):
+            return ''.join('[{0}]'.format(i) for i in parts[::-1])
+
+        def _add_bare(obj, *path):
+            if obj.src in IGNORE:
+                raise ValueError(
+                    'field{0}.src is not set'.format(_path(*path))
+                )
+            self.fields.append((obj.src, obj))
+
+        def _add_tuple(obj, *path):
+            if len(obj) != 2:
+                raise ValueError(
+                    'field{0} tuple be (src, field)'.format(_path(*path))
+                )
+            src, field = obj
+            self.fields.append((src, field))
+
+        def _add_list(obj, *path):
+            for i, item in enumerate(obj):
+                if isinstance(item, Field):
+                    _add_bare(item, i, *path)
+                elif isinstance(item, tuple):
+                    _add_tuple(item, i, *path)
+                elif isinstance(item, list):
+                    _add_list(item, i, *path)
+                else:
+                    raise ValueError(
+                        'field{0} should be field, (src, field) or [(src, field), ...]'
+                        .format(_path(*path))
+                    )
+
+        self.src = None
+        self.fields = []
+        if fields:
+            _add_list(fields)
+        if 'default' not in kwargs:
+            kwargs['default'] = list
+        super(Group, self).__init__(**kwargs)
+
+    def attach(self, parent, name=None):
+        if isinstance(parent, (Form, SubForm)):
+            raise TypeError(
+                '{0} must be attached to {1} which is not a Form or SubForm'
+                .format(type(parent))
+            )
+        return super(Group, self).attach(parent, name=name)
+
+    def _match(self, key):
+        for src, field in self.fields:
+            if isinstance(src, basestring):
+                if src == key:
+                    return field, None
+            else:
+                m = src.match(key)
+                if m is not None:
+                    return field, m
+
+    def _resolve(self):
+        return Close.dummy
+
+    def _parse(self, path):
+        keys = path.mapping()
+        if keys is NONE:
+            return self._default()
+        matches = 0
+        values = []
+        for key in keys:
+            match = self._match(key)
+            if match is None:
+                continue
+            matches += 1
+            field, captures = match
+            with self.ctx(src=key):
+                value = field.map()
+                if value in IGNORE:
+                    continue
+                values.append((key, captures, value))
+        return values if matches else NONE
 
 
 class FormMeta(type):
@@ -1317,17 +1481,12 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 args = args[1:]
             else:
                 if isinstance(args[0], (list, tuple)):
-                    src = DefaultSource(
-                        args[0],
-                        aliases=dict(
-                            (field.name, i) for i, field in enumerate(self.fields)
-                        )
-                    )
+                    src = self._seq_source(args[0])
                 else:
-                    src = DefaultSource(args[0])
+                    src = self._map_source(args[0])
                 args = args[1:]
         elif kwargs:
-            src = DefaultSource(kwargs)
+            src = self._map_source(kwargs)
             kwargs = {}
         dict.__init__(self, *args, **kwargs)
         if src:
@@ -1335,9 +1494,20 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             if errors:
                 raise errors[0]
 
+    def _map_source(self, obj):
+        return DefaultSource(obj)
+
+    def _seq_source(self, obj):
+        return DefaultSource(
+            obj,
+            aliases=dict(
+                (field.name, i) for i, field in enumerate(self.fields)
+            )
+        )
+
     def _reset(self, tags):
         for field in type(self).fields:
-            if tags and not tags & set(field.tags):
+            if tags and not tags & set(field.tags.keys()):
                 continue
             try:
                 field.__delete__(self)
@@ -1347,9 +1517,9 @@ class Form(dict, CreatedCountMixin, ContextMixin):
     def _map(self, tags, unmapped):
         with self.ctx(form=self, parent=self):
             for field in type(self).fields:
-                if tags and not tags & set(field.tags):
+                if tags and not tags & set(field.tags.keys()):
                     continue
-                value = field()
+                value = field.map()
                 if value not in IGNORE:
                     self[field.name] = value
         unmapped = self._unmapped(unmapped)
@@ -1377,16 +1547,11 @@ class Form(dict, CreatedCountMixin, ContextMixin):
 
     def _root_map(self, src, tags, unmapped, error):
         if src is None:
-            src = DefaultSource({})
+            src = self._map_source({})
         elif isinstance(src, dict):
-            src = DefaultSource(src)
+            src = self._map_source(src)
         elif isinstance(src, (list, tuple)):
-            src = DefaultSource(
-                src,
-                aliases=dict(
-                    (field.name, i) for i, field in enumerate(self.fields)
-                )
-            )
+            src = self._seq_source(src)
         elif isinstance(src, Source):
             pass
         else:
@@ -1420,6 +1585,26 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         if errors:
             raise errors[0]
         return self
+
+    def flatten(self):
+
+        path = []
+
+        def _flatten(form):
+            for field in type(form).fields:
+                value = self.get(field.name, NOT_SET)
+                if value in IGNORE:
+                    continue
+                if isinstance(value, Form):
+                    path.append(field)
+                    try:
+                        _flatten(value)
+                    finally:
+                        path.pop()
+                    continue
+                yield path + [field], value
+
+        return _flatten(self)
 
     def munge(self, func):
         form = type(self)()

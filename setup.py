@@ -20,6 +20,7 @@ extras_require = {
         'pytest-cov >=1.7,<2',
         'mock >=1.0,<2.0',
         'unittest2 >=0.5.1,<0.6',
+        'iso8601 >=0.1,<0.2',
     ],
 }
 

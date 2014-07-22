@@ -54,8 +54,14 @@ class JsonSource(Source):
         if isinstance(value, (int, long)) and not isinstance(value, bool):
             return value
         if not self.strict:
-            if isinstance(value, float) and value.is_integer():
-                return int(value)
+            if isinstance(value, float):
+                if value.is_integer():
+                    return int(value)
+            elif isinstance(value, basestring):
+                try:
+                    return int(value)
+                except ValueError:
+                    pass
         raise self.error(field, '{0} is not an integer'.format(value))
 
     def as_float(self, field, value):
@@ -63,6 +69,12 @@ class JsonSource(Source):
             return value
         if isinstance(value, (int, long)):
             return float(value)
+        if not self.strict:
+            if isinstance(value, basestring):
+                try:
+                    return float(value)
+                except ValueError:
+                    pass
         raise self.error(field, '{0} is not a float'.format(value))
 
     def as_bool(self, field, value):

@@ -35,9 +35,9 @@ class Frame(dict):
     def __getattr__(self, k):
         if k in self:
             return self[k]
-        raise AttributeError('"{0}" object has no attribute "{1}"'.format(
-            self.__class__.__name__, k
-        ))
+        raise AttributeError(
+            '"{0}" object has no attribute "{1}"'.format(type(self).__name__, k)
+        )
 
 
 class DummyContext(object):
@@ -110,9 +110,9 @@ class Context(threading.local):
         for frame in reversed(self.stack):
             if k in frame:
                 return frame[k]
-        raise AttributeError('"{0}" object has no attribute "{1}"'.format(
-            self.__class__.__name__, k
-        ))
+        raise AttributeError(
+            '"{0}" object has no attribute "{1}"'.format(type(self).__name__, k)
+        )
 
     def values_for(self, k):
         """

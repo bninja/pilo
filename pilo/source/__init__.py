@@ -87,6 +87,10 @@ class Path(collections.Sequence):
 
         return value
 
+    @value.setter
+    def value(self, obj):
+        self.idx[-1].value = obj
+
     def resolve(self, container, part):
         raise NotImplementedError()
 
