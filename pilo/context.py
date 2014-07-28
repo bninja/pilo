@@ -36,7 +36,8 @@ class Frame(dict):
         if k in self:
             return self[k]
         raise AttributeError(
-            '"{0}" object has no attribute "{1}"'.format(type(self).__name__, k)
+            '"{0}" object has no attribute "{1}"'
+            .format(type(self).__name__, k)
         )
 
 

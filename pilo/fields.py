@@ -201,7 +201,7 @@ def pluck(args, match):
         if match(arg):
             args.pop(i)
             return args, arg
-    return args, None
+    return args, NOT_SET
 
 
 class Field(CreatedCountMixin, ContextMixin):
@@ -1207,6 +1207,15 @@ class Type(String):
             default = choices[0]
         return cls(default=default, choices=list(choices))
 
+    @classmethod
+    def constant(cls, value):
+
+        def compute(self):
+            return value
+
+        field = cls.instance(value)
+        return field.compute.attach(field)(compute)
+
     def __init__(self, *args, **kwargs):
         self.types = None
         super(Type, self).__init__(*args, **kwargs)
@@ -1592,13 +1601,14 @@ class Form(dict, CreatedCountMixin, ContextMixin):
 
         def _flatten(form):
             for field in type(form).fields:
-                value = self.get(field.name, NOT_SET)
+                value = form.get(field.name, NOT_SET)
                 if value in IGNORE:
                     continue
                 if isinstance(value, Form):
                     path.append(field)
                     try:
-                        _flatten(value)
+                        for nested in _flatten(value):
+                            yield nested
                     finally:
                         path.pop()
                     continue
