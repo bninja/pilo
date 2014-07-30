@@ -1601,7 +1601,9 @@ class Form(dict, CreatedCountMixin, ContextMixin):
 
         def _flatten(form):
             for field in type(form).fields:
-                value = form.get(field.name, NOT_SET)
+                if field.name not in form:
+                    continue
+                value = form[field.name]
                 if value in IGNORE:
                     continue
                 if isinstance(value, Form):
@@ -1619,11 +1621,16 @@ class Form(dict, CreatedCountMixin, ContextMixin):
     def munge(self, func):
         form = type(self)()
         for field in type(self).fields:
-            value = func(form, field, self.get(field.name, NONE))
-            if value is not NONE:
-                form[field.name] = value
+            if field.name not in self:
+                value = NONE
+            else:
+                value = self[field.name]
+            value = func(form, field, value)
+            if value is NONE:
+                continue
             if isinstance(value, Form):
                 value = value.munge(func)
+            form[field.name] = value
         return form
 
     def filter(self, *tags, **kwargs):
