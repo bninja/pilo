@@ -50,6 +50,7 @@ import inspect
 import re
 import time
 import uuid
+import warnings
 import weakref
 
 try:
@@ -1555,20 +1556,24 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         return dict_field.map()
 
     def _root_map(self, src, tags, unmapped, error):
-        if src is None:
-            src = self._map_source({})
-        elif isinstance(src, dict):
-            src = self._map_source(src)
-        elif isinstance(src, (list, tuple)):
-            src = self._seq_source(src)
-        elif isinstance(src, Source):
-            pass
-        else:
-            raise ValueError('Invalid source, expected None, dict or Source')
-        errors = (CollectErrors if error == 'collect' else RaiseErrors)()
-        with self.ctx(src=src, errors=errors):
-            self._map(tags, unmapped)
-            errors = self.ctx.errors
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', 'With-statements now directly support multiple context managers'
+            )
+            if src is None:
+                src = self._map_source({})
+            elif isinstance(src, dict):
+                src = self._map_source(src)
+            elif isinstance(src, (list, tuple)):
+                src = self._seq_source(src)
+            elif isinstance(src, Source):
+                pass
+            else:
+                raise ValueError('Invalid source, expected None, dict or Source')
+            errors = (CollectErrors if error == 'collect' else RaiseErrors)()
+            with self.ctx(src=src, errors=errors):
+                self._map(tags, unmapped)
+                errors = self.ctx.errors
         return errors
 
     def _nested_map(self, tags, unmapped, error):
