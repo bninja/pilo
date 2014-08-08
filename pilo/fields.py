@@ -492,8 +492,13 @@ class Field(CreatedCountMixin, ContextMixin):
         return value
 
     def _default(self):
+        if self.ctx.ignore_default:
+            if not self.ctx.ignore_missing:
+                self.ctx.errors.missing()
+            return NOT_SET
         if self.default is NOT_SET:
-            self.ctx.errors.missing()
+            if not self.ctx.ignore_missing:
+                self.ctx.errors.missing()
         if self.default in IGNORE:
             return self.default
         if isinstance(self.default, type) or callable(self.default):

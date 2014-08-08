@@ -104,7 +104,13 @@ class Context(threading.local):
     def __init__(self):
         threading.local.__init__(self)
         self.stack = [
-            Frame(src=None, src_path=None, src_idx=None),
+            Frame(
+                src=None,
+                src_path=None,
+                src_idx=None,
+                ignore_default=False,
+                ignore_missing=False
+            ),
         ]
 
     def __getattr__(self, k):
