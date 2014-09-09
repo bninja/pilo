@@ -1,18 +1,24 @@
 """
-A `Source` where a `Form` "maps" (resolves, parses, etc) values from. There is
-a default `IdentitySource` which we use to talk to native pthon container types:
+A `Source` is where a `Form` by *computes*, i.e.:
+
+- resolves (see `Field._resolve`)
+- parses (see `Field._parse`)
+
+values from. There is a `DefaultSource` which is used to talk to native
+containers:
 
 - dicts
 - lists
 - tuples
 
-and primitives (e.g. int, basestring, etc). But typically you will implement
-`Source` for your source e.g.:
+and primitives (e.g. int, basestring, etc). There are also `Source`
+specializations for *computing* values from serializations:
 
-- application/api+json mime string
-- ConfigParser.ConfigParser object
+- `JsonSource`
+- `ConfigSource`
 - ...
 
+There's also `UnionSource` which unions a collection of `Source`s.
 """
 import collections
 import inspect
@@ -24,13 +30,15 @@ __all__ = [
     'Path',
     'Source',
     'DefaultSource',
+    'UnionSource',
+    'JsonSource',
     'ConfigSource',
 ]
 
 
 class SourceError(Exception):
     """
-    Based class for all `Source` path resolve errors.
+    Base class for all `Source` errors.
     """
 
     def __init__(self, path, message):
@@ -39,48 +47,59 @@ class SourceError(Exception):
         self.message = message
 
 
-class Path(collections.Sequence):
+class PathPart(object):
+
+    def __init__(self, key, value=NOT_SET):
+        self.key = key
+        self.value = NOT_SET
+
+    def __str__(self):
+        return str(self.key)
+
+
+class Path(collections.MutableSequence):
     """
     Represents a path to a `Field` within a `Source`.
 
     `src`
 
-    `idx`
-
     `root`
+
+    `location`
 
     """
 
-    def __init__(self, src, idx, root):
+    def __init__(self, src, root, location=None):
         self.src = src
-        self.idx = idx
         self.root = root
+        self.location = location
+        self.parts = []
 
     def __str__(self):
         parts = []
         if self:
             parts = ['{0}'.format(self[0])]
             for part in self[1:]:
-                if isinstance(part, (int, long)):
-                    part = '[{0}]'.format(part)
+                if isinstance(part.key, (int, long)):
+                    part = '[{0}]'.format(part.key)
                 else:
-                    part = '.' + part
+                    part = '.' + part.key
                 parts.append(part)
         return ''.join(parts)
 
     @property
     def value(self):
-        if self.idx and self.idx[-1].value is not NOT_SET:
-            return self.idx[-1].value
+        if self.parts and self.parts[-1].value is not NOT_SET:
+            return self.parts[-1].value
 
-        for i, part in enumerate(reversed(self.idx)):
+        for i, part in enumerate(reversed(self.parts)):
             if part.value is not NOT_SET:
-                i, value = len(self.idx) - i, part.value
+                i, value = len(self.parts) - i, part.value
                 break
         else:
             i, value = 0, self.root
 
-        for part in self.idx[i:]:
+        for part in self.parts[i:]:
             value = part.value = self.resolve(value, part)
             if value is NONE:
                 break
@@ -89,14 +108,17 @@ class Path(collections.Sequence):
 
     @value.setter
     def value(self, obj):
-        self.idx[-1].value = obj
+        if not self.parts:
+            self.root = obj
+        else:
+            self[-1].value = obj
 
     def resolve(self, container, part):
         raise NotImplementedError()
 
     @property
     def name(self):
-        return self.idx[-1]
+        return self[-1].key
 
     @property
     def exists(self):
@@ -117,14 +139,26 @@ class Path(collections.Sequence):
 
     # collections.Sequence
 
-    def __getitem__(self, key):
-        value = self.idx[key]
-        if not isinstance(key, slice):
-            return value.key
-        return [v.key for v in value]
+    def __getitem__(self, index):
+        return self.parts[index]
 
     def __len__(self):
-        return len(self.idx)
+        return len(self.parts)
+
+    # collections.MutableSequence
+
+    def __setitem__(self, index, value):
+        if isinstance(value, (long, int, basestring)):
+            value = PathPart(key=value)
+        self.parts[index] = value
+
+    def __delitem__(self, index):
+        del self.parts[index]
+
+    def insert(self, index, value):
+        if isinstance(value, (long, int, basestring)):
+            value = PathPart(key=value)
+        self.parts.insert(index, value)
 
 
 class Source(object):
@@ -146,7 +180,7 @@ class Source(object):
     #: Used to construct an error when resolving a path for this source fails.
     error = SourceError
 
-    def path(self, idx):
+    def path(self):
         """
         Constructs a root path for this source.
         """
@@ -169,7 +203,7 @@ class Source(object):
         Resolves a path to a primitive within this source. If no type is given
         then it'll be inferred if possible.
         """
-        raise NotImplementedError()
+        raise NotImplementedError('{0} does not support primitves!'.format(type(self)))
 
 
 class ParserMixin(object):
@@ -256,3 +290,7 @@ class ParserMixin(object):
 from .default import DefaultSource, DefaultPath
 from .configparser import ConfigSource, ConfigPath
 from .json import JsonSource, JsonPath
+from .union import UnionSource, UnionPath
+
+
+union = UnionSource

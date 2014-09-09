@@ -27,7 +27,7 @@ and `Context` variables are are managed like:
 import functools
 import threading
 
-from . import Source, NOT_SET
+from . import Source
 
 
 class Frame(dict):
@@ -72,16 +72,6 @@ class RewindDidNotStop(Exception):
         )
 
 
-class SourcePart(object):
-
-    def __init__(self, key):
-        self.key = key
-        self.value = NOT_SET
-
-    def __str__(self):
-        return str(self.key)
-
-
 
 class Context(threading.local):
     """
@@ -91,9 +81,6 @@ class Context(threading.local):
         TODO
 
     `src_path`
-        TODO
-
-    `src_idx`
         TODO
 
     You should never need to create this, just use the `ctx` global.
@@ -107,7 +94,6 @@ class Context(threading.local):
             Frame(
                 src=None,
                 src_path=None,
-                src_idx=None,
                 ignore_default=False,
                 ignore_missing=False
             ),
@@ -131,7 +117,7 @@ class Context(threading.local):
         """
         Used if you need to recursively parse forms.
         """
-        self.stack.append(Frame(src=None, src_path=None, src_idx=None))
+        self.stack.append(Frame(src=None, src_path=None))
         return Close(functools.partial(self.restore))
 
     def rewind(self, stop):
@@ -154,12 +140,12 @@ class Context(threading.local):
         else:
             raise RewindDidNotStop()
         del self.stack[-i:]
-        if self.src_idx is not None:
+        if self.src_path is not None:
             for frame in frames:
-                if 'src_idx' in frame:
+                if 'src_path' in frame:
                     break
                 if 'src' in frame:
-                    self.src_idx.pop()
+                    self.src_path.pop()
         return Close(functools.partial(self.restore, frames))
 
     def push(self, **kwargs):
@@ -167,11 +153,9 @@ class Context(threading.local):
         """
         if 'src' in kwargs:
             if isinstance(kwargs['src'], Source):
-                kwargs['src_idx'] = []
-                kwargs['src_path'] = kwargs['src'].path(kwargs['src_idx'])
+                kwargs['src_path'] = kwargs['src'].path()
             else:
-                kwargs['src'] = SourcePart(kwargs['src'])
-                self.src_idx.append(kwargs['src'])
+                self.src_path.append(kwargs['src'])
         self.stack.append(Frame(**kwargs))
         return Close(self.restore)
 
@@ -183,15 +167,15 @@ class Context(threading.local):
         """
         if frames is None:
             frame = self.stack.pop()
-            if 'src' in frame and 'src_idx' not in frame:
-                self.src_idx.pop()
+            if 'src' in frame and 'src_path' not in frame:
+                self.src_path.pop()
         elif frames:
-            if self.src_idx is not None:
+            if self.src_path is not None:
                 for frame in frames:
-                    if 'src_idx' in frame:
+                    if 'src_path' in frame:
                         break
                     if 'src' in frame:
-                        self.src_idx.append(frame.src)
+                        self.src_path.append(frame.src)
             self.stack.extend(frames)
 
 

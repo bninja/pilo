@@ -1,5 +1,3 @@
-"""
-"""
 import collections
 import re
 import shlex
@@ -12,13 +10,12 @@ class ConfigPath(Path):
 
     # Path
 
-    def __init__(self, src, idx):
+    def __init__(self, src):
         if src.section:
             root = SectionMapping(src.config, src.section, src.defaults)
         else:
             root = Mapping(src.config, src.defaults)
-        super(ConfigPath, self).__init__(src, idx, root)
-        self.location = src.location
+        super(ConfigPath, self).__init__(src, root, src.location)
         self.section = src.section
 
     def __str__(self):
@@ -56,7 +53,7 @@ class SectionMapping(collections.Mapping):
     def __init__(self, config, section, defaults):
         self.config = config
         self.section = section
-        pattern = r'(?P<name>\w+)\[(?P<key>\w+)\]'
+        pattern = r'(?P<name>[\w\_]+)\[(?P<key>[\w\_\-\.]+)\]'
         self.defaults = defaults
         self.sub_mappings = collections.defaultdict(dict)
         for option, value in self.config.items(section):
@@ -140,8 +137,8 @@ class ConfigSource(Source, ParserMixin):
 
     # Source
 
-    def path(self, view):
-        return ConfigPath(self, view)
+    def path(self):
+        return ConfigPath(self)
 
     def sequence(self, path):
         value = path.value

@@ -10,8 +10,8 @@ __all__ = [
     'source',
     'Source',
     'SourceError',
-    'DefaultPath',
     'DefaultSource',
+    'UnionSource',
     'fields',
     'Field',
     'FieldError',
@@ -103,7 +103,7 @@ class Types(dict):
 
 
 from . import source
-from .source import Source, SourceError, DefaultPath, DefaultSource
+from .source import Source, SourceError, DefaultSource, UnionSource
 from .context import ctx, ContextMixin, Close
 from . import fields
 from .fields import Field, FieldError, Missing, Invalid, Form

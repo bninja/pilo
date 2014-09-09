@@ -1,5 +1,4 @@
-"""
-"""
+import collections
 import copy
 
 from . import Source, Path, ParserMixin, NONE
@@ -27,7 +26,7 @@ class DefaultPath(Path):
     def _as_alias(self, container, atom):
         if (self.src.aliases and
             atom in self.src.aliases and
-            len(self.idx) == 1):
+            len(self) == 1):
             alias = self.src.aliases[atom]
             return self._as_item(container, alias)
         return NONE
@@ -42,8 +41,15 @@ class DefaultPath(Path):
 
     # Path
 
-    def __init__(self, src, idx):
-        super(DefaultPath, self).__init__(src, idx, src.data)
+    def __init__(self, src, location=None):
+        super(DefaultPath, self).__init__(src, src.data, location)
+
+    def __str__(self):
+        parts = []
+        if self.location:
+            parts.append(self.location)
+        parts.append(super(DefaultPath, self).__str__())
+        return ':'.join(parts)
 
     def resolve(self, container, part):
         if isinstance(part.key, basestring) and part.key.endswith('()'):
@@ -69,30 +75,31 @@ class DefaultPath(Path):
 
 class DefaultSource(Source, ParserMixin):
 
-    def __init__(self, data, aliases=None, ignores=None):
+    def __init__(self, data, aliases=None, ignores=None, location=None):
         self.data = data
         self.aliases = aliases
         self.ignores = None
         if ignores:
             self.ignores = [ignore.split('.') for ignore in ignores]
+        self.location = location
 
     def ignore(self, path):
         if not self.ignores:
             return False
-        return [part for part in path] in self.ignores
+        return [part.key for part in path] in self.ignores
 
     # Source
 
-    def path(self, idx):
-        return DefaultPath(self, idx)
+    def path(self):
+        return DefaultPath(self, self.location)
 
     def sequence(self, path):
-        if not isinstance(path.value, (list, tuple)):
+        if not isinstance(path.value, (collections.Sequence, list, tuple)):
             raise self.error(path, 'is not a sequence')
         return len(path.value)
 
     def mapping(self, path):
-        if not isinstance(path.value, (dict,)):
+        if not isinstance(path.value, (collections.Mapping, dict,)):
             raise self.error(path, 'is not a mapping')
         return path.value.keys()
 

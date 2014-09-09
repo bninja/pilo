@@ -1,5 +1,3 @@
-"""
-"""
 from __future__ import absolute_import
 
 import inspect
@@ -12,15 +10,15 @@ class JsonPath(Path):
 
     # Path
 
-    def __init__(self, src, idx, location=None):
-        super(JsonPath, self).__init__(src, idx, src.data)
-        self.location = location
+    def __init__(self, src, location=None):
+        super(JsonPath, self).__init__(src, src.data, location=location)
 
     def __str__(self):
-        value = super(JsonPath, self).__str__()
+        parts = []
         if self.location:
-            value = '{0}:{1}'.format(self.location, value)
-        return value
+            parts.append(self.location)
+        parts.append(super(JsonPath, self).__str__())
+        return ':'.join(parts)
 
     def resolve(self, container, part):
         try:
@@ -114,8 +112,8 @@ class JsonSource(Source):
 
     # Source
 
-    def path(self, view):
-        return JsonPath(self, view, self.location)
+    def path(self):
+        return JsonPath(self, self.location)
 
     def sequence(self, path):
         if not isinstance(path.value, (list, tuple)):

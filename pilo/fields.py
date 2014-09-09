@@ -309,6 +309,7 @@ class Field(CreatedCountMixin, ContextMixin):
         self.compute = Hook(self, inspect.getargspec(self._compute))
         self.resolve = Hook(self, inspect.getargspec(self._resolve))
         self.parse = Hook(self, inspect.getargspec(self._parse))
+        self.default = Hook(self, inspect.getargspec(self._default))
         self.munge = Hook(self, inspect.getargspec(self._munge))
         self.filter = Hook(self, inspect.getargspec(self._filter))
         self.validate = Hook(self, inspect.getargspec(self._validate))
@@ -319,7 +320,6 @@ class Field(CreatedCountMixin, ContextMixin):
         self.src = src
 
         # options
-        self.default = NOT_SET
         self.nullable = NONE
         self.ignores = []
         self.translations = {}
@@ -492,6 +492,9 @@ class Field(CreatedCountMixin, ContextMixin):
         return value
 
     def _default(self):
+        """
+        Determines default.
+        """
         if self.ctx.ignore_default:
             if not self.ctx.ignore_missing:
                 self.ctx.errors.missing()
@@ -499,8 +502,15 @@ class Field(CreatedCountMixin, ContextMixin):
         if self.default is NOT_SET:
             if not self.ctx.ignore_missing:
                 self.ctx.errors.missing()
+            return NOT_SET
         if self.default in IGNORE:
             return self.default
+        if isinstance(self.default, Hook):
+            if self.default:
+                return self.default()
+            if not self.ctx.ignore_missing:
+                self.ctx.errors.missing()
+            return NOT_SET
         if isinstance(self.default, type) or callable(self.default):
             return self.default()
         return self.default
@@ -524,6 +534,8 @@ class Field(CreatedCountMixin, ContextMixin):
                 else:
                     value = self._compute()
                 if value is NONE:
+                    if isinstance(self.default, Hook) and self.default:
+                        return self.default()
                     return self._default()
                 if value in IGNORE:
                     return value
