@@ -72,7 +72,6 @@ class RewindDidNotStop(Exception):
         )
 
 
-
 class Context(threading.local):
     """
     Used to manage variables and source paths with these reserved attributes:
@@ -95,7 +94,7 @@ class Context(threading.local):
                 src=None,
                 src_path=None,
                 ignore_default=False,
-                ignore_missing=False
+                ignore_missing=False,
             ),
         ]
 

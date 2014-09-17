@@ -627,7 +627,10 @@ class String(Field):
     def __init__(self, *args, **kwargs):
         length = kwargs.pop('length', None)
         if length:
-            self.max_length = self.min_length = length
+            if isinstance(length, (list, tuple)):
+                self.min_length, self.max_length = length
+            else:
+                self.min_length = self.max_length = length
         else:
             self.min_length = kwargs.pop('min_length', None)
             self.max_length = kwargs.pop('max_length', None)
@@ -726,8 +729,12 @@ class String(Field):
 class Number(Field):
 
     def __init__(self, *args, **kwargs):
-        self.min_value = kwargs.pop('min_value', None)
-        self.max_value = kwargs.pop('max_value', None)
+        range_value = kwargs.pop('range', None)
+        if range_value is not None:
+            self.min_value, self.max_value = range_value
+        else:
+            self.min_value = kwargs.pop('min_value', None)
+            self.max_value = kwargs.pop('max_value', None)
         super(Number, self).__init__(*args, **kwargs)
 
     def min(self, value):
@@ -1030,13 +1037,20 @@ class List(Field):
             if isinstance(arg, Field):
                 field = args.pop(i)
                 break
+            if inspect.isclass(arg) and issubclass(arg, Form):
+                field = SubForm(args.pop(i))
+                break
         else:
             if 'field' not in kwargs:
                 raise Exception('Missing field')
             field = kwargs.pop('field')
         self.field = field.attach(self, None)
-        self.min_length = kwargs.pop('min_length', None)
-        self.max_length = kwargs.pop('max_length', None)
+        length = kwargs.pop('length', None)
+        if length:
+            self.min_length, self.max_length = length
+        else:
+            self.min_length = kwargs.pop('min_length', None)
+            self.max_length = kwargs.pop('max_length', None)
         self.allow_field = kwargs.pop('allow_field', False)
         super(List, self).__init__(*args, **kwargs)
 

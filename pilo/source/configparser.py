@@ -1,6 +1,8 @@
 import collections
+import ConfigParser
 import re
 import shlex
+import StringIO
 import textwrap
 
 from . import Source, Path, ParserMixin, NONE
@@ -107,11 +109,20 @@ class ConfigSource(Source, ParserMixin):
                  section=None,
                  location=None,
                  defaults=None,
-                 preserve_whitespace=False
+                 preserve_whitespace=False,
+                 preserve_case=False,
         ):
         super(ConfigSource, self).__init__()
         if preserve_whitespace and location is None:
-            raise ValueError('preserve white-space=True without location')
+            raise ValueError('preserve_white_space=True without location')
+        if preserve_whitespace and not isinstance(config, basestring):
+            raise ValueError('preserve_case=True but config is not string')
+        if isinstance(config, basestring):
+            parser = ConfigParser.ConfigParser()
+            if preserve_case:
+                config.optionxform = lambda x: x
+            parser.readfp(StringIO.StringIO(config))
+            config = parser
         self.config = config
         self.section = section
         self.location = location
@@ -144,10 +155,12 @@ class ConfigSource(Source, ParserMixin):
         value = path.value
         if isinstance(value, basestring):
             return len(Sequence(value))
+        if isinstance(value, collections.Sequence):
+            return len(value)
         raise self.error(path, 'not a sequence')
 
     def mapping(self, path):
-        if isinstance(path.value, (collections.Mapping, dict)):
+        if isinstance(path.value, collections.Mapping):
             return path.value.keys()
         raise self.error(path, 'not a mapping')
 
