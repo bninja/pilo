@@ -291,6 +291,3 @@ from .default import DefaultSource, DefaultPath
 from .configparser import ConfigSource, ConfigPath
 from .json import JsonSource, JsonPath
 from .union import UnionSource, UnionPath
-
-
-union = UnionSource
