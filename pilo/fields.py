@@ -1666,6 +1666,13 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 continue
             if isinstance(value, Form):
                 value = value.munge(func)
+            elif isinstance(value, (list, tuple)):
+                items = []
+                for item in value:
+                    if isinstance(item, Form):
+                        item = item.munge(func)
+                    items.append(item)
+                value = items
             form[field.name] = value
         return form
 
