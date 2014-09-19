@@ -115,7 +115,7 @@ class ConfigSource(Source, ParserMixin):
         super(ConfigSource, self).__init__()
         if preserve_whitespace and location is None:
             raise ValueError('preserve_white_space=True without location')
-        if preserve_whitespace and not isinstance(config, basestring):
+        if preserve_case and not isinstance(config, basestring):
             raise ValueError('preserve_case=True but config is not string')
         if isinstance(config, basestring):
             parser = ConfigParser.ConfigParser()
