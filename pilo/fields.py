@@ -587,7 +587,7 @@ class Field(CreatedCountMixin, ContextMixin):
     def __get__(self, form, form_type=None):
         if form is None:
             return self
-        if not self.compute and self.name in form:
+        if self.name in form:
             return form[self.name]
         if getattr(self.ctx, 'form', None) is None:
             with self.ctx(form=form, parent=form, src=DefaultSource({})):
