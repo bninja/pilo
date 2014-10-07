@@ -135,7 +135,7 @@ class ConfigSource(Source, ParserMixin):
         self.preserve_whitespace = preserve_whitespace
 
     def as_raw(self, path):
-        option = path[-1]
+        option = str(path[-1])
         lines = []
         with open(self.location, 'r') as fo:
             section_header = '[{0}]'.format(self.section)
