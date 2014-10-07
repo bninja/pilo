@@ -700,32 +700,32 @@ class String(Field):
             invalid = list(set(c for c in value if c not in self.alphabet))
             if invalid:
                 self.ctx.errors.invalid(
-                    'has invalid characters "{}"'.format(''.join(invalid))
+                    'has invalid characters "{0}"'.format(''.join(invalid))
                 )
                 return False
         if (self.min_length is not None and len(value) < self.min_length):
-            self.ctx.errors.invalid('"{}" must have length >= {}'.format(
+            self.ctx.errors.invalid('"{0}" must have length >= {1}'.format(
                 value, self.min_length
             ))
             return False
         if (self.max_length is not None and len(value) > self.max_length):
-            self.ctx.errors.invalid('"{}" must have length <= {}'.format(
+            self.ctx.errors.invalid('"{0}" must have length <= {1}'.format(
                 value, self.max_length
             ))
             return False
         if self.pattern_re and not self.pattern_re.match(value):
-            self.ctx.errors.invalid('"{}" must match pattern "{}"'.format(
+            self.ctx.errors.invalid('"{0}" must match pattern "{1}"'.format(
                 value, self.pattern_re.pattern
             ))
             return False
         if self.choices and value not in self.choices + self.translations.values():
             if len(self.choices) == 1:
-                self.ctx.errors.invalid('"{}" is not "{}"'.format(
+                self.ctx.errors.invalid('"{0}" is not "{1}"'.format(
                     value, self.choices[0],
                 ))
             else:
-                self.ctx.errors.invalid('"{}" is not one of {}'.format(
-                    value, ', '.join(['"{}"'.format(c) for c in self.choices]),
+                self.ctx.errors.invalid('"{0}" is not one of {1}'.format(
+                    value, ', '.join(['"{0}"'.format(c) for c in self.choices]),
                 ))
             return False
         return True
@@ -758,12 +758,12 @@ class Number(Field):
             return False
         if value is not None:
             if self.min_value is not None and value < self.min_value:
-                self.ctx.errors.invalid('"{}" must be >= {}'.format(
+                self.ctx.errors.invalid('"{0}" must be >= {1}'.format(
                     value, self.min_value
                 ))
                 return False
             if self.max_value is not None and value > self.max_value:
-                self.ctx.errors.invalid('"{}" must be <= {}'.format(
+                self.ctx.errors.invalid('"{0}" must be <= {1}'.format(
                     value, self.max_value
                 ))
                 return False
@@ -873,7 +873,7 @@ class Date(Field, RangeMixin):
             return path.value
         value = path.primitive(basestring)
         if not self._format:
-            self.ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+            self.ctx.errors.invalid('Unknown format for value "{0}"'.format(value))
             return ERROR
         formats = (
             self._format
@@ -902,10 +902,10 @@ class Date(Field, RangeMixin):
             return False
         if value is not None:
             if self.after_value is not None and value < self.after_value:
-                self.ctx.errors.invalid('Must be after {}'.format(self.after_value))
+                self.ctx.errors.invalid('Must be after {0}'.format(self.after_value))
                 return False
             if self.before_value is not None and value > self.before_value:
-                self.ctx.errors.invalid('Must be before {}'.format(self.before_value))
+                self.ctx.errors.invalid('Must be before {0}'.format(self.before_value))
                 return False
         return True
 
@@ -932,7 +932,7 @@ class Time(Field, RangeMixin):
         if self._format != None:
             parsed = time.strptime(value, self._format)
         else:
-            self.ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+            self.ctx.errors.invalid('Unknown format for value "{0}"'.format(value))
             return ERROR
         return parsed
 
@@ -941,10 +941,10 @@ class Time(Field, RangeMixin):
             return False
         if value is not None:
             if self.after_value is not None and value < self.after_value:
-                self.ctx.errors.invalid('Must be after {}'.format(self.after_value))
+                self.ctx.errors.invalid('Must be after {0}'.format(self.after_value))
                 return False
             if self.before_value is not None and value > self.before_value:
-                self.ctx.errors.invalid('Must be before {}'.format(self.before_value))
+                self.ctx.errors.invalid('Must be before {0}'.format(self.before_value))
                 return False
         return True
 
@@ -976,7 +976,7 @@ class Datetime(Field, RangeMixin):
         elif self._format != None:
             parsed = datetime.datetime.strptime(value, self._format)
         else:
-            self.ctx.errors.invalid('Unknown format for value "{}"'.format(value))
+            self.ctx.errors.invalid('Unknown format for value "{0}"'.format(value))
             return ERROR
         return parsed
 
@@ -985,10 +985,10 @@ class Datetime(Field, RangeMixin):
             return False
         if value is not None:
             if self.after_value is not None and value < self.after_value:
-                self.ctx.errors.invalid('Must be after {}'.format(self.after_value))
+                self.ctx.errors.invalid('Must be after {0}'.format(self.after_value))
                 return False
             if self.before_value is not None and value > self.before_value:
-                self.ctx.errors.invalid('Must be before {}'.format(self.before_value))
+                self.ctx.errors.invalid('Must be before {0}'.format(self.before_value))
                 return False
         return True
 
@@ -1094,12 +1094,12 @@ class List(Field):
             return False
         if value is not None:
             if self.min_length is not None and len(value) < self.min_length:
-                self.ctx.errors.invalid('Must have {} or more items'.format(
+                self.ctx.errors.invalid('Must have {0} or more items'.format(
                     self.min_length
                 ))
                 return False
             if self.max_length is not None and len(value) > self.max_length:
-                self.ctx.errors.invalid('Must have {} or fewer items'.format(
+                self.ctx.errors.invalid('Must have {0} or fewer items'.format(
                     self.max_length
                 ))
                 return False
@@ -1145,12 +1145,12 @@ class Dict(Field):
             if self.required_keys:
                 missing_keys = self.required_keys.difference(value.keys())
                 if missing_keys:
-                    self.ctx.errors.invalid('Missing required keys {}'.format(
+                    self.ctx.errors.invalid('Missing required keys {0}'.format(
                         ', '.join(missing_keys)
                     ))
                     return False
             if self.max_keys and len(value) > self.max_keys:
-                self.ctx.errors.invalid('Cannot have more than {} key(s)'.format(
+                self.ctx.errors.invalid('Cannot have more than {0} key(s)'.format(
                     self.max_keys
                 ))
                 return False
@@ -1586,7 +1586,8 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 return
             else:
                 raise ValueError(
-                    'unmapped="{}" invalid, should be "capture" or "ignore"'.format(directive)
+                    'unmapped="{0}" invalid, should be "capture" or "ignore"'
+                    .format(directive)
                 )
         if isinstance(directive, Field):
             directive = (String(), directive)
