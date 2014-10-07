@@ -41,7 +41,12 @@ class ConfigPath(Path):
 class Sequence(collections.Sequence):
 
     def __init__(self, value):
-        self.values = shlex.split(value)
+        if '\n' in value:
+            self.values = [
+                line.strip() for line in value.splitlines() if line.strip()
+            ]
+        else:
+            self.values = shlex.split(value)
 
     def __getitem__(self, i):
         return self.values[i]

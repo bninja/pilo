@@ -56,12 +56,14 @@ class Close(object):
 
     def __init__(self, func):
         self.func = func
+        self.disable = False
 
     def __enter__(self):
         return self
 
     def __exit__(self, type, value, traceback):
-        self.func()
+        if not self.disable:
+            self.func()
 
 
 class RewindDidNotStop(Exception):

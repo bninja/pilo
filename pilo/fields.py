@@ -587,20 +587,25 @@ class Field(CreatedCountMixin, ContextMixin):
     def __get__(self, form, form_type=None):
         if form is None:
             return self
-        if not self.compute and self.name in form:
+        if self.name in form:
             return form[self.name]
         if getattr(self.ctx, 'form', None) is None:
-            with self.ctx(form=form, parent=form, src=DefaultSource({})):
-                value = self()
+            with self.ctx(
+                     form=form,
+                     parent=form,
+                     src=getattr(form, 'src', DefaultSource({})),
+                     errors=RaiseErrors()
+                 ):
+                value = self.map()
         else:
             if form is not getattr(self.ctx, 'parent', None):
                 is_form = lambda frame: getattr(frame, 'parent', None) is form
                 try:
                     with self.ctx.rewind(is_form):
-                        return self()
+                        return self.map()
                 except self.ctx.RewindDidNotStop:
                     with self.ctx(form=form, parent=form, src=DefaultSource({})):
-                        value = self()
+                        value = self.map()
             else:
                 value = self()
         if value in IGNORE:
@@ -1187,7 +1192,7 @@ class Code(Field):
 
     def _parse(self, path):
         value = super(Code, self)._parse(path)
-        if value in IGNORE:
+        if value in IGNORE or not isinstance(value, basestring):
             return value
 
         # in-line
@@ -1326,8 +1331,10 @@ class PolymorphicSubForm(Field):
         except ValueError, ex:
             self.ctx.errors.invalid(str(ex))
             return ERROR
+        if identity is None:
+            return NONE
         if identity not in self.type_field.types:
-            self.ctx.errors.invalid('invalid identity {}'.format(identity))
+            self.ctx.errors.invalid('invalid identity {0}'.format(identity))
             return ERROR
         return self.type_field.types[identity]
 
@@ -1447,12 +1454,13 @@ class FormMeta(type):
     def __new__(mcs, name, bases, dikt):
         cls = type.__new__(mcs, name, bases, dikt)
         is_field = lambda x: isinstance(x, Field)
-        fields = []
-        for name, attr in inspect.getmembers(cls, is_field):
-            if not attr.is_attached:
-                attr.attach(cls, name)
-            if attr not in fields:
-                fields.append(attr)
+        fields, field_ids = [], set()
+        for name, field in inspect.getmembers(cls, is_field):
+            if not field.is_attached:
+                field.attach(cls, name)
+            if id(field) not in field_ids:
+                fields.append(field)
+                field_ids.add(id(field))
         fields.sort(key=lambda x: x._count)
         cls.fields = fields
         return cls
@@ -1556,6 +1564,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
                 pass
 
     def _map(self, tags, unmapped):
+        self.ctx.src_path.mapping()
         with self.ctx(form=self, parent=self):
             for field in type(self).fields:
                 if tags and not tags & set(field.tags.keys()):
@@ -1600,7 +1609,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
             elif isinstance(src, Source):
                 pass
             else:
-                raise ValueError('Invalid source, expected None, dict or Source')
+                raise ValueError('Invalid src, expected None, dict or Source')
             errors = (CollectErrors if error == 'collect' else RaiseErrors)()
             with self.ctx(src=src, errors=errors):
                 self._map(tags, unmapped)
@@ -1630,6 +1639,21 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         if errors:
             raise errors[0]
         return self
+
+    def has(self, field):
+        if isinstance(field, basestring):
+            name = field
+            if name in self:
+                return True
+            field = getattr(self, name, None)
+            if field is None:
+                return False
+        elif not isinstance(field, Field):
+            raise TypeError('{0!r} is not string for Field'.format(field))
+        try:
+            return field.__get__(self) is not None
+        except LookupError:
+            return False
 
     def flatten(self):
 

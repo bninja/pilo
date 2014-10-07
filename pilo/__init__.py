@@ -1,6 +1,6 @@
 """
 """
-__version__ = '0.4.0'
+__version__ = '0.5.0'
 
 __all__ = [
     'NOT_SET',
@@ -96,7 +96,7 @@ class Types(dict):
         probe = self.type_form()
         errors = probe.map(src)
         if not errors:
-            return getattr(probe, self.type_field.name)
+            return self.type_field.__get__(probe)
         if default in IGNORE:
             raise errors[0]
         return default

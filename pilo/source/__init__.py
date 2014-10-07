@@ -203,7 +203,7 @@ class Source(object):
         Resolves a path to a primitive within this source. If no type is given
         then it'll be inferred if possible.
         """
-        raise NotImplementedError('{0} does not support primitves!'.format(type(self)))
+        raise NotImplementedError('{0} does not support primitives!'.format(type(self)))
 
 
 class ParserMixin(object):
@@ -290,4 +290,5 @@ class ParserMixin(object):
 from .default import DefaultSource, DefaultPath
 from .configparser import ConfigSource, ConfigPath
 from .json import JsonSource, JsonPath
-from .union import UnionSource, UnionPath
+from .union import UnionSource, UnionSource as union, UnionPath
+from .mount import MountSource, MountSource as mount, MountPath
