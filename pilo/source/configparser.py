@@ -109,6 +109,12 @@ class Mapping(collections.Mapping):
 
 class ConfigSource(Source, ParserMixin):
 
+    @classmethod
+    def from_file(cls, path, *args, **kwargs):
+        kwargs['location'] = kwargs
+        with open(path, 'r') as fo:
+            return cls(fo.read(), *args, **kwargs)
+
     def __init__(self,
                  config,
                  section=None,
