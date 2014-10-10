@@ -111,7 +111,7 @@ class ConfigSource(Source, ParserMixin):
 
     @classmethod
     def from_file(cls, path, *args, **kwargs):
-        kwargs['location'] = kwargs
+        kwargs['location'] = path
         with open(path, 'r') as fo:
             return cls(fo.read(), *args, **kwargs)
 
