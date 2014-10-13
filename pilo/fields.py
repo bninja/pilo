@@ -1234,15 +1234,15 @@ class Type(String):
     """
 
     @classmethod
-    def abstract(cls):
-        return cls()
+    def abstract(cls, *args, **options):
+        return cls(*args, **options)
 
     @classmethod
-    def instance(cls, *choices):
+    def instance(cls, *choices, **options):
         default = NONE
         if len(choices) == 1:
             default = choices[0]
-        return cls(default=default, choices=list(choices))
+        return cls(default=default, choices=list(choices), **options)
 
     @classmethod
     def constant(cls, value):

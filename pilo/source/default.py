@@ -94,14 +94,20 @@ class DefaultSource(Source, ParserMixin):
         return DefaultPath(self, self.location)
 
     def sequence(self, path):
-        if not isinstance(path.value, (collections.Sequence, list, tuple)):
-            raise self.error(path, 'is not a sequence')
-        return len(path.value)
+        if isinstance(path.value, (collections.Sequence, list, tuple)):
+            return len(path.value)
+        raise self.error(path, 'is not a sequence')
 
     def mapping(self, path):
-        if not isinstance(path.value, (collections.Mapping, dict,)):
-            raise self.error(path, 'is not a mapping')
-        return path.value.keys()
+        if isinstance(path.value, (collections.Mapping, dict)):
+            if self.aliases and len(path) == 0:
+                return self.aliases.keys()
+            return path.value.keys()
+        if (isinstance(path.value, (collections.Sequence, list, tuple)) and
+            self.aliases and
+            len(path) == 0):
+            return self.aliases.keys()
+        raise self.error(path, 'is not a mapping')
 
     def primitive(self, path, *types):
         return self.parser(types)(self, path, path.value)
