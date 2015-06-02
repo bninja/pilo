@@ -42,9 +42,18 @@ Here we validate that a message has acceptable headers and body.
 Hooks
 ~~~~~
 
-Override-able mechanism allowing users to inject functions to customize behavior
+Override-able mechanism allowing users to inject functions to customize these
+behaviors:
 
-(compute, resolve, parse, default, munge, filter, validate)
+- compute
+- resolve
+- parse
+- default
+- munge
+- filter
+- validate
+
+e.g.:
 
 .. code:: python
 
@@ -257,5 +266,5 @@ dev
    $ git clone git@github.com:bninja/pilo.git
    $ cd pilo
    $ mkvirtualenv pilo
-   (pilo)$ python setup.py develop
-   (pilo)$ nosetests
+   (pilo)$ pip install -e .[tests]
+   (pilo)$ py.test tests/ --cov=pilo --cov-report term-missing
