@@ -10,8 +10,40 @@ pilo
 
 Yet another form parser.
 
-Example Usage
--------------
+dev
+---
+
+.. code:: bash
+
+   $ git clone git@github.com:bninja/pilo.git
+   $ cd pilo
+   $ mkvirtualenv pilo
+   (pilo)$ pip install -e .[tests]
+   (pilo)$ py.test tests/ --cov=pilo --cov-report term-missing
+
+release
+-------
+
+All is well:
+
+.. code:: bash
+
+   (pilo)$ py.test tests/ --cov=pilo --cov-report term-missing
+
+so update ``__version__`` in:
+
+- ``pilo/__init__.py``
+
+then commit and tag it (`travis <https://travis-ci.org/bninja>`_ will publish it to `pypi <https://pypi.python.org/pypi/pilo/>`_):
+
+.. code:: bash
+
+   $ git commit -am "release v{version}"
+   $ git tag -a v{version} -m "release v{version}"
+   $ git push --tags
+
+usage
+-----
 
 Validation
 ~~~~~~~~~~
@@ -256,15 +288,3 @@ polymorphic on the country abbreviation.
 
     >>> print type(bart.address).__name__
     UnitedStatesAddress
-
-
-dev
----
-
-.. code:: bash
-
-   $ git clone git@github.com:bninja/pilo.git
-   $ cd pilo
-   $ mkvirtualenv pilo
-   (pilo)$ pip install -e .[tests]
-   (pilo)$ py.test tests/ --cov=pilo --cov-report term-missing
