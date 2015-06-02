@@ -1,5 +1,5 @@
+import abc
 import datetime
-import pprint
 import re
 
 import pilo
@@ -337,3 +337,40 @@ class TestFormPolymorphism(TestCase):
             ]
             for left, right in equalities:
                 self.assertEqual(left, right)
+
+    def test_computed(self):
+        
+        class Animal(pilo.Form):
+
+            clothed = pilo.fields.Boolean()
+
+            type = pilo.fields.Type.abstract()
+
+            @type.compute
+            def type(self):
+                return 'man' if self.clothed else 'beast'
+            
+            @abc.abstractmethod
+            def send_to_zoo(self):
+                pass
+
+        class Man(Animal):
+
+            type = pilo.fields.Type.instance('man')
+
+            def send_to_zoo(self):
+                raise TypeError('Hey now.')
+
+        class Beast(Animal):
+
+            type = pilo.fields.Type.instance('beast')
+            
+            def send_to_zoo(self):
+                pass
+
+        for desc, cls in [
+                (dict(clothed=True), Man),
+                (dict(clothed=False), Beast)
+            ]:
+            obj = Animal.type.cast(desc)(desc)
+            self.assertIsInstance(obj, cls)

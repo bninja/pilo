@@ -75,7 +75,7 @@ class Types(dict):
     def for_field(cls, type_field):
         fields = {}
         for field in type_field.parent.fields:
-            fields[field.name] = type(field)(field.src, default=None)
+            fields[field.name] = field.clone()
             if field is type_field:
                 break
         else:
