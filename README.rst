@@ -34,7 +34,7 @@ so update ``__version__`` in:
 
 - ``pilo/__init__.py``
 
-then commit and tag it (`travis <https://travis-ci.org/bninja>`_ will publish it to `pypi <https://pypi.python.org/pypi/pilo/>`_):
+then commit and tag it (`travis <https://travis-ci.org/bninja/pilo>`_ will publish it to `pypi <https://pypi.python.org/pypi/pilo/>`_):
 
 .. code:: bash
 
