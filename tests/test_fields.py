@@ -294,3 +294,46 @@ class TestForm(TestCase):
             )
 
         MyForm(src)
+
+
+class TestFormPolymorphism(TestCase):
+
+    def test_downcast(self):
+
+        class Animal(pilo.Form):
+
+            kind = pilo.fields.Type.abstract()
+
+        class Cat(Animal):
+
+            kind = pilo.fields.Type.instance('cat')
+            sound = pilo.fields.String(default='meow')
+            name = pilo.fields.String()
+
+        class Dog(Animal):
+
+            kind = pilo.fields.Type.instance('dog')
+            sound = pilo.fields.String(default='woof')
+            name = pilo.fields.String()
+
+        cat_dict = dict(name='whiskers', kind='cat')
+        dog_dict = dict(name='fido', kind='dog')
+        cats = [
+            Animal.kind.cast(cat_dict)(**cat_dict),
+            Animal.kind.cast(cat_dict)(cat_dict),
+        ]
+        dogs = [
+            Animal.kind.cast(dog_dict)(**dog_dict),
+            Animal.kind.cast(dog_dict)(dog_dict),
+        ]
+        for cat, dog in zip(cats, dogs):
+            equalities = [
+                (type(cat), Cat),
+                (type(dog), Dog),
+                (cat.name, cat_dict['name']),
+                (dog.name, dog_dict['name']),
+                (cat.sound, 'meow'),
+                (dog.sound, 'woof'),
+            ]
+            for left, right in equalities:
+                self.assertEqual(left, right)
