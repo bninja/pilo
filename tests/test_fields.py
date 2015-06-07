@@ -374,3 +374,31 @@ class TestFormPolymorphism(TestCase):
             ]:
             obj = Animal.type.cast(desc)(desc)
             self.assertIsInstance(obj, cls)
+
+    def test_explicit_field_name_existing_method(self):
+        """
+        Test that you can use existing dictionary methods for field names.
+        """
+
+        class Form(pilo.Form):
+
+            items_key = pilo.fields.List(pilo.fields.String(), name='items')
+
+        items = ['a', 'b', 'c']
+        form = Form(items=items)
+        self.assertEqual(form['items'], items)
+        self.assertEqual(dict(form.items()), dict(items=items))
+
+    def test_explicit_field_name_reserved_word(self):
+        """
+        Test that you can use existing dictionary methods for field names.
+        """
+
+        class Form(pilo.Form):
+
+            defintion = pilo.fields.Tuple((pilo.fields.String(), pilo.fields.String(), ), name='def')
+
+        definition = ('term', 'definition')
+        form = Form(**{'def': definition})
+        self.assertEqual(form['def'], definition)
+        self.assertEqual(dict(form), {'def': definition})
