@@ -3,7 +3,7 @@ import datetime
 import re
 
 import pilo
-from pilo.fields import Integer, List, String
+from pilo.fields import Integer, List, String, SubForm
 
 from tests import TestCase
 
@@ -453,5 +453,65 @@ class TestFormExceptions(TestCase):
             '"female", "neutral"'
             '\n'
             '* Missing: likes - missing'
+            '\n'
+        )
+
+    def test_exceptions_in_nested_forms(self):
+
+        class DatingProfile(pilo.Form):
+
+            genders = ['male', 'female', 'neutral']
+
+            name = String()
+            email = String()
+            postal_code = String(length=5)
+            blurb = String(max_length=100)
+            gender = String(choices=genders)
+            sexual_preferences = List(String(choices=genders))
+            likes = List(String())
+
+        class Matches(pilo.Form):
+
+            similarity = Integer()
+            candidates = List(SubForm(DatingProfile))
+
+        with self.assertRaises(pilo.fields.FormError) as ctx:
+            Matches(
+                similarity="Not an integer",
+                candidates=[
+                    dict(
+                        name='William Henry Cavendish III',
+                        email='whc@example.org',
+                        postal_code='9021',  # Invalid postal code
+                        blurb='I am a test fixture',
+                        gender='male',
+                        sexual_preferences=['female', 'neutral'],
+                        # Likes parameter missing
+                    ),
+                    dict(),
+                    ]
+            )
+        self.assertEquals(
+            ctx.exception.message,
+            '\n'
+            '* Invalid: similarity - "Not an integer" is not an integer'
+            '\n'
+            '* Invalid: candidates[0].postal_code - "9021" must have length >= 5'
+            '\n'
+            '* Missing: candidates[0].likes - missing'
+            '\n'
+            '* Missing: candidates[1].name - missing'
+            '\n'
+            '* Missing: candidates[1].email - missing'
+            '\n'
+            '* Missing: candidates[1].postal_code - missing'
+            '\n'
+            '* Missing: candidates[1].blurb - missing'
+            '\n'
+            '* Missing: candidates[1].gender - missing'
+            '\n'
+            '* Missing: candidates[1].sexual_preferences - missing'
+            '\n'
+            '* Missing: candidates[1].likes - missing'
             '\n'
         )
