@@ -376,32 +376,10 @@ class TestFormPolymorphism(TestCase):
             obj = Animal.type.cast(desc)(desc)
             self.assertIsInstance(obj, cls)
 
+
+class TestFormExceptions(TestCase):
+
     def test_exceptions(self):
-
-        class Image(pilo.Field):
-
-            supported_encodings = ['base64']
-            supported_formats = ['png']
-
-            def __init__(self, *args, **kwargs):
-                self.encoding = kwargs.pop('encoding', None)
-                self.format = kwargs.pop('format', None)
-                super(Image, self).__init__(*args, **kwargs)
-
-            def _parse(self, path):
-                return path.value.decode(self.encoding)
-
-            def _validate(self, value):
-                predicate_by_format = dict(
-                    png=lambda value: value[:8] == '\211PNG\r\n\032\n'
-                )
-                predicate = predicate_by_format.get(self.format)
-                if predicate and predicate(value):
-                    return True
-                self.ctx.errors.invalid(
-                    'Image must be formatted as {0}'.format(self.format)
-                )
-                return False
 
         class DatingProfile(pilo.Form):
 
@@ -414,9 +392,8 @@ class TestFormPolymorphism(TestCase):
             gender = String(choices=genders)
             sexual_preferences = List(String(choices=genders))
             likes = List(String())
-            picture = Image(format='png', encoding='base64')
 
-        profile_params_with_one_error = dict(
+        profile_with_one_error = dict(
             name='William Henry Cavendish III',
             email='whc@example.org',
             postal_code='9021',  # Invalid length
@@ -424,58 +401,56 @@ class TestFormPolymorphism(TestCase):
             gender='male',
             sexual_preferences=['female', 'neutral'],
             likes=['croquet', 'muesli', 'ruses', 'umbrellas', 'wenches'],
-            picture='iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA1UlEQ'
-                    'VRYR+1XQRKAIAjUr/SbXtxv\n+kqNBxsjcCFsGmfoqsC6C5vmlNKRf'
-                    'vxyAEAMHPvqEigvWzeelaAtihIgdCjXA0AJ8BaVQHG5bwC+\nLF5B0'
-                    'RoXAG3x3r43OQLAjYGiE2pArwR1KmodcxOOANAeMgCYGUDOh9ZFHy'
-                    'iBtEFQMus6l19txVqT\nqQfhpglasTXY4vlS7rkY0BqVtM8lQdukXA'
-                    'H033dLQPWmNyVk4cMBWEdwLgCaZrMyIJlc91JKddXe\nkKU4rk+6D5'
-                    'M3jUanBbEZL6Ng4HcGTmCz+wGYWb2FAAAAAElFTkSuQmCC\n'
         )
-        profile_params_with_two_errors = dict(
+        profile_with_two_errors = dict(
             name='William Henry Cavendish III',
             email='whc@example.org',
-            postal_code='9021',  # Invalid length
+            postal_code='9021',  # Invalid postal code
             blurb='I am a test fixture',
             gender='male',
             sexual_preferences=['female', 'neutral'],
-            likes=['croquet', 'muesli', 'ruses', 'umbrellas', 'wenches'],
-            picture='PHN2ZyBoZWlnaHQ9IjEwMCIgd2lkdGg9IjEwMCI+CiAgPGNpcmNsZ'
-                    'SBjeD0iNTAiIGN5PSI1MCIg\ncj0iNDAiIHN0cm9rZT0iYmxhY2siI'
-                    'HN0cm9rZS13aWR0aD0iMyIgZmlsbD0icmVkIiAvPgogIFNv\ncnJ5L'
-                    'CB5b3VyIGJyb3dzZXIgZG9lcyBub3Qgc3VwcG9ydCBpbmxpbmUgU1'
-                    'ZHLiAgCjwvc3ZnPiA=\n'  # SVG Image
+            # Likes parameter missing
         )
-        profile_params_with_three_errors = dict(
+        profile_with_three_errors = dict(
             name='William Henry Cavendish III',
             email='whc@example.org',
             postal_code='9021',  # Invalid length
             blurb='I am a test fixture',
             gender='male',
-            sexual_preferences=['aliens'],
-            likes=['croquet', 'muesli', 'ruses', 'umbrellas', 'wenches'],
-            # No picture
+            sexual_preferences=['alien'],  # Invalid preference
+            # likes is missing
         )
-        with self.assertRaises(pilo.fields.Invalid):
-            DatingProfile(**profile_params_with_one_error)
 
-        with self.assertRaises(pilo.fields.FieldError):
-            DatingProfile(**profile_params_with_two_errors)
+        with self.assertRaises(pilo.fields.FormError) as ctx:
+            DatingProfile(profile_with_one_error)
 
-        with self.assertRaises(pilo.fields.Invalid):
-            DatingProfile(**profile_params_with_two_errors)
+        self.assertEquals(
+            ctx.exception.message,
+            '\n'
+            '* Invalid: postal_code - "9021" must have length >= 5'
+            '\n'
+        )
+        with self.assertRaises(pilo.fields.FormError) as ctx:
+            DatingProfile(profile_with_two_errors)
 
-        with self.assertRaises(pilo.fields.MultipleExceptions):
-            DatingProfile(**profile_params_with_two_errors)
+        self.assertEquals(
+            ctx.exception.message,
+            '\n'
+            '* Invalid: postal_code - "9021" must have length >= 5'
+            '\n'
+            '* Missing: likes - missing'
+            '\n'
+        )
+        with self.assertRaises(pilo.fields.FormError) as ctx:
+            DatingProfile(profile_with_three_errors)
 
-        with self.assertRaises(pilo.fields.MultipleExceptions):
-            DatingProfile(**profile_params_with_three_errors)
-
-        with self.assertRaises(pilo.fields.Invalid):
-            DatingProfile(**profile_params_with_three_errors)
-
-        with self.assertRaises(pilo.fields.Missing):
-            DatingProfile(**profile_params_with_three_errors)
-
-        with self.assertRaises(pilo.fields.FieldError):
-            DatingProfile(**profile_params_with_three_errors)
+        self.assertEquals(
+            ctx.exception.message,
+            '\n'
+            '* Invalid: postal_code - "9021" must have length >= 5'
+            '\n'
+            '* Invalid: sexual_preferences[0] - "alien" is not one of "male", "female", "neutral"'
+            '\n'
+            '* Missing: likes - missing'
+            '\n'
+        )
