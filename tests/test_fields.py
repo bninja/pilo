@@ -296,6 +296,15 @@ class TestForm(TestCase):
 
         MyForm(src)
 
+    def test_decimal_integer(self):
+        class MyForm(pilo.Form):
+            amt = pilo.fields.Decimal()
+
+        try:
+            MyForm(dict(amt=0))
+        except pilo.fields.Invalid:
+            self.fail("Failed to parse integer decimal value")
+
 
 class TestFormPolymorphism(TestCase):
 
