@@ -3,6 +3,7 @@ import datetime
 import re
 
 import pilo
+from pilo.fields import Integer, List, String, SubForm
 
 from tests import TestCase
 
@@ -295,6 +296,15 @@ class TestForm(TestCase):
 
         MyForm(src)
 
+    def test_decimal_integer(self):
+        class MyForm(pilo.Form):
+            amt = pilo.fields.Decimal()
+
+        try:
+            MyForm(dict(amt=0))
+        except pilo.fields.Invalid:
+            self.fail("Failed to parse integer decimal value")
+
 
 class TestFormPolymorphism(TestCase):
 
@@ -374,3 +384,143 @@ class TestFormPolymorphism(TestCase):
             ]:
             obj = Animal.type.cast(desc)(desc)
             self.assertIsInstance(obj, cls)
+
+
+class TestFormExceptions(TestCase):
+
+    def test_exceptions(self):
+
+        class DatingProfile(pilo.Form):
+
+            genders = ['male', 'female', 'neutral']
+
+            name = String()
+            email = String()
+            postal_code = String(length=5)
+            blurb = String(max_length=100)
+            gender = String(choices=genders)
+            preferences = List(String(choices=genders))
+            likes = List(String())
+
+        profile_with_one_error = dict(
+            name='William Henry Cavendish III',
+            email='whc@example.org',
+            postal_code='9021',  # Invalid length
+            blurb='I am a test fixture',
+            gender='male',
+            preferences=['female', 'neutral'],
+            likes=['croquet', 'muesli', 'ruses', 'umbrellas', 'wenches'],
+        )
+        profile_with_two_errors = dict(
+            name='William Henry Cavendish III',
+            email='whc@example.org',
+            postal_code='9021',  # Invalid postal code
+            blurb='I am a test fixture',
+            gender='male',
+            preferences=['female', 'neutral'],
+            # Likes parameter missing
+        )
+        profile_with_three_errors = dict(
+            name='William Henry Cavendish III',
+            email='whc@example.org',
+            postal_code='9021',  # Invalid length
+            blurb='I am a test fixture',
+            gender='male',
+            preferences=['alien'],  # Invalid preference
+            # likes is missing
+        )
+
+        with self.assertRaises(pilo.fields.FormError) as ctx:
+            DatingProfile(profile_with_one_error)
+
+        self.assertEquals(
+            ctx.exception.message,
+            '\n'
+            '* Invalid: postal_code - "9021" must have length >= 5'
+            '\n'
+        )
+        with self.assertRaises(pilo.fields.FormError) as ctx:
+            DatingProfile(profile_with_two_errors)
+
+        self.assertEquals(
+            ctx.exception.message,
+            '\n'
+            '* Invalid: postal_code - "9021" must have length >= 5'
+            '\n'
+            '* Missing: likes - missing'
+            '\n'
+        )
+        with self.assertRaises(pilo.fields.FormError) as ctx:
+            DatingProfile(profile_with_three_errors)
+
+        self.assertEquals(
+            ctx.exception.message,
+            '\n'
+            '* Invalid: postal_code - "9021" must have length >= 5'
+            '\n'
+            '* Invalid: preferences[0] - "alien" is not one of "male", '
+            '"female", "neutral"'
+            '\n'
+            '* Missing: likes - missing'
+            '\n'
+        )
+
+    def test_exceptions_in_nested_forms(self):
+
+        class DatingProfile(pilo.Form):
+
+            genders = ['male', 'female', 'neutral']
+
+            name = String()
+            email = String()
+            postal_code = String(length=5)
+            blurb = String(max_length=100)
+            gender = String(choices=genders)
+            preferences = List(String(choices=genders))
+            likes = List(String())
+
+        class Matches(pilo.Form):
+
+            similarity = Integer()
+            candidates = List(SubForm(DatingProfile))
+
+        with self.assertRaises(pilo.fields.FormError) as ctx:
+            Matches(
+                similarity="Not an integer",
+                candidates=[
+                    dict(
+                        name='William Henry Cavendish III',
+                        email='whc@example.org',
+                        postal_code='9021',  # Invalid postal code
+                        blurb='I am a test fixture',
+                        gender='male',
+                        preferences=['female', 'neutral'],
+                        # Likes parameter missing
+                    ),
+                    dict(),
+                    ]
+            )
+        self.assertEquals(
+            ctx.exception.message,
+            '\n'
+            '* Invalid: similarity - "Not an integer" is not an integer'
+            '\n'
+            '* Invalid: candidates[0].postal_code - "9021" must have length >= 5'
+            '\n'
+            '* Missing: candidates[0].likes - missing'
+            '\n'
+            '* Missing: candidates[1].name - missing'
+            '\n'
+            '* Missing: candidates[1].email - missing'
+            '\n'
+            '* Missing: candidates[1].postal_code - missing'
+            '\n'
+            '* Missing: candidates[1].blurb - missing'
+            '\n'
+            '* Missing: candidates[1].gender - missing'
+            '\n'
+            '* Missing: candidates[1].preferences - missing'
+            '\n'
+            '* Missing: candidates[1].likes - missing'
+            '\n'
+        )

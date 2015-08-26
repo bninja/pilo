@@ -47,6 +47,7 @@ import datetime
 import decimal
 import imp
 import inspect
+import numbers
 import re
 import time
 import uuid
@@ -77,6 +78,29 @@ __all__ = [
     'SubForm',
     'Form',
 ]
+
+
+class FormError(ValueError):
+
+    def __init__(self, *field_errors):
+        self.field_errors = field_errors
+        super(FormError, self).__init__(self.message)
+
+    def __str__(self):
+        return self.message
+
+    def __repr__(self):
+        return 'FormError({0})'.format(
+            ', '.join(exc.__class__.__name__ for exc in self.field_errors)
+        )
+
+    @property
+    def message(self):
+        msg = '\n* '.join(
+            '{0}: {1}'.format(exc.__class__.__name__, str(exc))
+            for exc in self.field_errors
+        )
+        return '\n* {0}\n'.format(msg)
 
 
 class FieldError(ValueError):
@@ -118,9 +142,12 @@ class Errors(object):
 
 class RaiseErrors(list, Errors):
 
-    def __call__(self, *ex):
-        self.extend(ex)
-        raise ex[0]
+    def __call__(self, *excs):
+        self.extend(excs)
+        field_errors = [e for e in self if isinstance(e, FieldError)]
+        if field_errors:
+            raise FormError(*field_errors)
+        raise self[0]
 
 
 class CollectErrors(list, Errors):
@@ -821,7 +848,7 @@ class Decimal(Number):
     def _parse(self, path):
         if isinstance(path.value, decimal.Decimal):
             return path.value
-        if isinstance(path.value, float):
+        if isinstance(path.value, numbers.Number):
             return decimal.Decimal(path.value)
         value = path.primitive(basestring)
         return decimal.Decimal(value)
@@ -1541,7 +1568,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         if src:
             errors = self.map(src)
             if errors:
-                raise errors[0]
+                RaiseErrors()(*errors)
 
     def _map_source(self, obj):
         return DefaultSource(obj)
@@ -1638,7 +1665,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         if error == 'collect':
             return errors
         if errors:
-            raise errors[0]
+            RaiseErrors()(*errors)
         return self
 
     def has(self, field):
