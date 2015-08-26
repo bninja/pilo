@@ -47,6 +47,7 @@ import datetime
 import decimal
 import imp
 import inspect
+import numbers
 import re
 import time
 import uuid
@@ -847,7 +848,7 @@ class Decimal(Number):
     def _parse(self, path):
         if isinstance(path.value, decimal.Decimal):
             return path.value
-        if isinstance(path.value, float):
+        if isinstance(path.value, numbers.Number):
             return decimal.Decimal(path.value)
         value = path.primitive(basestring)
         return decimal.Decimal(value)
