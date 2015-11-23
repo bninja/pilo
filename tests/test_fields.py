@@ -1,5 +1,6 @@
 import abc
 import datetime
+import inspect
 import re
 
 import pilo
@@ -295,6 +296,24 @@ class TestForm(TestCase):
 
         MyForm(src)
 
+    def test_time_delta(self):
+
+        class Task(pilo.Form):
+
+            due_in = pilo.fields.TimeDelta()
+
+        for desc, expected in [
+                (dict(due_in='10s'), datetime.timedelta(seconds=10)),
+                (dict(due_in='1h10s'), datetime.timedelta(hours=1, seconds=10)),
+                (dict(due_in='nevah'), pilo.Invalid),
+            ]:
+            if inspect.isclass(expected) and issubclass(expected, Exception):
+                with self.assertRaises(expected):
+                    Task(desc)
+            else:
+                obj = Task(desc)
+                self.assertEqual(obj.due_in, expected)
+
 
 class TestFormPolymorphism(TestCase):
 
@@ -339,7 +358,7 @@ class TestFormPolymorphism(TestCase):
                 self.assertEqual(left, right)
 
     def test_computed(self):
-        
+
         class Animal(pilo.Form):
 
             clothed = pilo.fields.Boolean()

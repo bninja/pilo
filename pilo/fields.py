@@ -58,6 +58,11 @@ try:
 except ImportError:
     pass
 
+try:
+    import pytimeparse
+except ImportError as ex:
+    pass
+
 from . import (
     NONE, NOT_SET, ERROR, IGNORE, ctx, ContextMixin, Close, Source, SourceError, DefaultSource, Types,
 )
@@ -731,16 +736,12 @@ class String(Field):
         return True
 
 
-class Number(Field):
+class RangeMixin(object):
 
-    def __init__(self, *args, **kwargs):
-        range_value = kwargs.pop('range', None)
-        if range_value is not None:
-            self.min_value, self.max_value = range_value
-        else:
-            self.min_value = kwargs.pop('min_value', None)
-            self.max_value = kwargs.pop('max_value', None)
-        super(Number, self).__init__(*args, **kwargs)
+
+    min_value = None
+
+    max_value = None
 
     def min(self, value):
         self.min_value = value
@@ -753,9 +754,7 @@ class Number(Field):
     def range(self, l, r):
         return self.min(l).max(r)
 
-    def _validate(self, value):
-        if not super(Number, self)._validate(value):
-            return False
+    def validate(self, value):
         if value is not None:
             if self.min_value is not None and value < self.min_value:
                 self.ctx.errors.invalid('"{0}" must be >= {1}'.format(
@@ -768,6 +767,22 @@ class Number(Field):
                 ))
                 return False
         return True
+
+class Number(Field, RangeMixin):
+
+    def __init__(self, *args, **kwargs):
+        range_value = kwargs.pop('range', None)
+        if range_value is not None:
+            self.min_value, self.max_value = range_value
+        else:
+            self.min_value = kwargs.pop('min_value', None)
+            self.max_value = kwargs.pop('max_value', None)
+        super(Number, self).__init__(*args, **kwargs)
+
+    def _validate(self, value):
+        if not super(Number, self)._validate(value):
+            return False
+        return RangeMixin.validate(self, value)
 
 
 class Integer(Number):
@@ -836,7 +851,7 @@ class Boolean(Field):
 Bool = Boolean
 
 
-class RangeMixin(object):
+class TimeRangeMixin(object):
 
     def after(self, value):
         self.after_value = value
@@ -850,7 +865,7 @@ class RangeMixin(object):
         return self.after(l).before(r)
 
 
-class Date(Field, RangeMixin):
+class Date(Field, TimeRangeMixin):
 
     def __init__(self, *args, **kwargs):
         self.after_value = kwargs.pop('after', None)
@@ -910,7 +925,7 @@ class Date(Field, RangeMixin):
         return True
 
 
-class Time(Field, RangeMixin):
+class Time(Field, TimeRangeMixin):
 
     def __init__(self, *args, **kwargs):
         self.after_value = kwargs.pop('after', None)
@@ -949,7 +964,7 @@ class Time(Field, RangeMixin):
         return True
 
 
-class Datetime(Field, RangeMixin):
+class Datetime(Field, TimeRangeMixin):
 
     def __init__(self, *args, **kwargs):
         self.after_value = kwargs.pop('after', None)
@@ -991,6 +1006,43 @@ class Datetime(Field, RangeMixin):
                 self.ctx.errors.invalid('Must be before {0}'.format(self.before_value))
                 return False
         return True
+
+
+class TimeDelta(Field, RangeMixin):
+
+    def __init__(self, *args, **kwargs):
+        range_value = kwargs.pop('range', None)
+        if range_value is not None:
+            self.min_value, self.max_value = range_value
+        else:
+            self.min_value = kwargs.pop('min_value', None)
+            self.max_value = kwargs.pop('max_value', None)
+        self._format = kwargs.pop('format', 'human')
+        super(TimeDelta, self).__init__(*args, **kwargs)
+
+    def format(self, value):
+        self._format = value
+        return self
+
+    def _parse(self, path):
+        if isinstance(path.value, datetime.datetime):
+            return path.value
+        value = path.primitive(basestring)
+        if self._format == 'human':
+            parsed = pytimeparse.parse(value)
+            if parsed is None:
+                self.ctx.errors.invalid('Not a time-delta expression')
+                return ERROR
+            parsed = datetime.timedelta(seconds=parsed)
+        else:
+            self.ctx.errors.invalid('No format for value "{0}"'.format(value))
+            return ERROR
+        return parsed
+
+    def _validate(self, value):
+        if not super(TimeDelta, self)._validate(value):
+            return False
+        return RangeMixin.validate(self, value)
 
 
 class Tuple(Field):
