@@ -18,6 +18,7 @@ extras_require = {
     'tests': [
         'pytest >=2.5.2,<3',
         'pytest-cov >=1.7,<2',
+        'pytimeparse >=1.1.5,<2',
         'mock >=1.0,<2.0',
         'unittest2 >=0.5.1,<0.6',
         'iso8601 >=0.1,<0.2',
