@@ -1025,7 +1025,7 @@ class TimeDelta(Field, RangeMixin):
         return self
 
     def _parse(self, path):
-        if isinstance(path.value, datetime.datetime):
+        if isinstance(path.value, datetime.timedelta):
             return path.value
         value = path.primitive(basestring)
         if self._format == 'human':

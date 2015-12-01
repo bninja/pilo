@@ -306,6 +306,7 @@ class TestForm(TestCase):
                 (dict(due_in='10s'), datetime.timedelta(seconds=10)),
                 (dict(due_in='1h10s'), datetime.timedelta(hours=1, seconds=10)),
                 (dict(due_in='nevah'), pilo.Invalid),
+                (dict(due_in=datetime.timedelta(seconds=10)), datetime.timedelta(seconds=10)),
             ]:
             if inspect.isclass(expected) and issubclass(expected, Exception):
                 with self.assertRaises(expected):
