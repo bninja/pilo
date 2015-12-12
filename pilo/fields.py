@@ -142,7 +142,7 @@ class CreatedCountMixin(object):
 
     _created_count = 0
 
-    def  __init__(self):
+    def __init__(self):
         CreatedCountMixin._created_count += 1
         self._count = CreatedCountMixin._created_count
 
@@ -394,7 +394,7 @@ class Field(CreatedCountMixin, ContextMixin):
         return self.parent is not None
 
     def clone(self):
-        other = copy.copy(self)
+        other = copy.deepcopy(self)
         other.parent = None
         return other
 

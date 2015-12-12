@@ -394,3 +394,28 @@ class TestFormPolymorphism(TestCase):
             ]:
             obj = Animal.type.cast(desc)(desc)
             self.assertIsInstance(obj, cls)
+
+    def test_override_hook(self):
+        """
+        Test that Sub-classes can independently provide hooks on the fields by
+        cloning.
+        """
+
+        class Item(pilo.Form):
+            price = pilo.fields.Integer()
+
+        class Heirloom(Item):
+
+            has_sentimental_value = pilo.fields.Boolean()
+
+            price = Item.price.clone()
+
+            @price.compute
+            def get_price(self):
+                return 1000000 if self.has_sentimental_value else 0
+
+        item = Item(price=100)
+        self.assertEqual(item.price, 100)
+
+        heirloom = Heirloom(has_sentimental_value=False)
+        self.assertEqual(heirloom.price, 0)
