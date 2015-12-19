@@ -307,7 +307,7 @@ class Field(CreatedCountMixin, ContextMixin):
 
     """
 
-    def __init__(self, src=NONE, **options):
+    def __init__(self, src=NONE, name=None, **options):
         super(Field, self).__init__()
 
         # hooks
@@ -321,7 +321,7 @@ class Field(CreatedCountMixin, ContextMixin):
 
         # site
         self.parent = None
-        self.name = None
+        self.name = name
         self.src = src
 
         # options
@@ -377,7 +377,9 @@ class Field(CreatedCountMixin, ContextMixin):
         return '{0}({1})'.format(type(self).__name__, attrs)
 
     def attach(self, parent, name=None):
-        self.parent, self.name = parent, name
+        self.parent = parent
+        if self.name is None:
+            self.name = name
         if self.src is NONE:
             self.src = self.name
         if inspect.isclass(parent) and issubclass(parent, Form):
