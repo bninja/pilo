@@ -125,13 +125,50 @@ class RaiseErrors(list, Errors):
 
     def __call__(self, *ex):
         self.extend(ex)
-        raise ex[0]
+        raise MultipleExceptions(*ex)
 
 
 class CollectErrors(list, Errors):
 
     def __call__(self, *ex):
         self.extend(ex)
+
+
+class MultipleExceptions(Exception):
+
+    def __new__(cls, *exceptions):
+        exception_classes = list(set(
+            exc.__class__ for exc in exceptions
+        ))
+        bases = tuple([cls] + sorted(
+            exception_classes,
+            key=lambda c: len(c.mro()), reverse=True
+        ))
+        cls = type(cls.__name__, bases, dict(cls.__dict__))
+        instance = Exception.__new__(cls)
+        instance.__init__(*exceptions)
+        return instance
+
+    def __init__(self, *exceptions):
+        if len(exceptions) == 1:
+            raise exceptions[0]
+        self.exceptions = exceptions
+
+    def __str__(self):
+        return self.message
+
+    def __repr__(self):
+        return 'MultipleExceptions({0})'.format(
+            ', '.join(exc.__class__.__name__ for exc in self.exceptions)
+        )
+
+    @property
+    def message(self):
+        msg = '\n* '.join(
+            '{0}: {1}'.format(exc.__class__.__name__, str(exc))
+            for exc in self.exceptions
+        )
+        return '\n\n* {0}'.format(msg)
 
 
 class CreatedCountMixin(object):
@@ -1593,7 +1630,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         if src:
             errors = self.map(src)
             if errors:
-                raise errors[0]
+                raise MultipleExceptions(*errors)
 
     def _map_source(self, obj):
         return DefaultSource(obj)
@@ -1690,7 +1727,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         if error == 'collect':
             return errors
         if errors:
-            raise errors[0]
+            raise MultipleExceptions(*errors)
         return self
 
     def has(self, field):
