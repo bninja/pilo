@@ -1,8 +1,4 @@
-import contextlib
 import os
-from StringIO import StringIO
-import sys
-import tempfile
 
 try:
     import unittest2 as unittest
@@ -27,10 +23,3 @@ class TestCase(unittest.TestCase):
     @classmethod
     def read_fixture(cls, *path):
         return cls.open_fixture(*path).read()
-
-
-
-class TestInterface(TestCase):
-
-    def test_all(self):
-        from pilo import *

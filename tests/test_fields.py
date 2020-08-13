@@ -33,7 +33,6 @@ class TestForm(TestCase):
 
             field3 = pilo.fields.SubForm(MySubForm, 'payload')
 
-
         form = MyForm({
             'field1': 55,
             'ff2': 't',
@@ -90,7 +89,6 @@ class TestForm(TestCase):
             }
         }, form)
 
-
     def test_rewind(self):
 
         class MySubForm(pilo.Form):
@@ -98,7 +96,6 @@ class TestForm(TestCase):
             link = pilo.fields.String().format('/my/{id}', id='id')
 
             id = pilo.fields.Integer()
-
 
         class MyForm(pilo.Form):
 
@@ -131,7 +128,6 @@ class TestForm(TestCase):
             'checksum': '123123213',
         }, form)
 
-
     def test_clone(self):
 
         class MySubForm(pilo.Form):
@@ -139,7 +135,6 @@ class TestForm(TestCase):
             link = pilo.fields.String().format('/my/{id}', id='id')
 
             id = pilo.fields.Integer()
-
 
         class MyForm(pilo.Form):
 
@@ -178,7 +173,6 @@ class TestForm(TestCase):
         class MySubForm(pilo.Form):
 
             za = pilo.fields.Float()
-
 
         class MyForm(pilo.Form):
 
@@ -277,19 +271,22 @@ class TestForm(TestCase):
 
             a = pilo.fields.Group(
                 ('a', pilo.fields.Integer()),
-                (re.compile('^a\[(?P<op>in|\!in)\]$'), pilo.fields.List(pilo.fields.Integer())),
-                (re.compile('^a\[(?P<op>\<|\>)]$'), pilo.fields.Integer()),
-                (re.compile('^a\.(?P<op>between)$'), pilo.fields.Tuple((pilo.fields.Integer(), pilo.fields.Integer()))),
+                (re.compile(r'^a\[(?P<op>in|\!in)\]$'), pilo.fields.List(pilo.fields.Integer())),
+                (re.compile(r'^a\[(?P<op>\<|\>)]$'), pilo.fields.Integer()),
+                (
+                    re.compile(r'^a\.(?P<op>between)$'),
+                    pilo.fields.Tuple((pilo.fields.Integer(), pilo.fields.Integer()))
+                ),
             )
 
             b = pilo.fields.Group(
                 ('b', pilo.fields.String()),
-                (re.compile('^b\[(?P<op>=|\!=)]$'), pilo.fields.String()),
+                (re.compile(r'^b\[(?P<op>=|\!=)]$'), pilo.fields.String()),
             )
 
             c = pilo.fields.Group(
                 ('c', pilo.fields.Datetime(format='iso8601')),
-                (re.compile('^c\[(?P<op>=|\!=\|\<|\>)]$'), pilo.fields.Datetime(format='iso8601')),
+                (re.compile(r'^c\[(?P<op>=|\!=\|\<|\>)]$'), pilo.fields.Datetime(format='iso8601')),
             ).options(
                 default=lambda: [('c', None, datetime.datetime.utcnow())]
             )
@@ -349,7 +346,7 @@ class TestFormPolymorphism(TestCase):
                 self.assertEqual(left, right)
 
     def test_computed(self):
-        
+
         class Animal(pilo.Form):
 
             clothed = pilo.fields.Boolean()
@@ -359,7 +356,7 @@ class TestFormPolymorphism(TestCase):
             @type.compute
             def type(self):
                 return 'man' if self.clothed else 'beast'
-            
+
             @abc.abstractmethod
             def send_to_zoo(self):
                 pass
@@ -374,14 +371,11 @@ class TestFormPolymorphism(TestCase):
         class Beast(Animal):
 
             type = pilo.fields.Type.instance('beast')
-            
+
             def send_to_zoo(self):
                 pass
 
-        for desc, cls in [
-                (dict(clothed=True), Man),
-                (dict(clothed=False), Beast)
-            ]:
+        for desc, cls in [(dict(clothed=True), Man), (dict(clothed=False), Beast)]:
             obj = Animal.type.cast(desc)(desc)
             self.assertIsInstance(obj, cls)
 

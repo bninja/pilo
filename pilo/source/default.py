@@ -24,9 +24,7 @@ class DefaultPath(Path):
             return NONE
 
     def _as_alias(self, container, atom):
-        if (self.src.aliases and
-            atom in self.src.aliases and
-            len(self) == 1):
+        if self.src.aliases and atom in self.src.aliases and len(self) == 1:
             alias = self.src.aliases[atom]
             return self._as_item(container, alias)
         return NONE
@@ -103,9 +101,7 @@ class DefaultSource(Source, ParserMixin):
             if self.aliases and len(path) == 0:
                 return self.aliases.keys()
             return path.value.keys()
-        if (isinstance(path.value, (collections.Sequence, list, tuple)) and
-            self.aliases and
-            len(path) == 0):
+        if isinstance(path.value, (collections.Sequence, list, tuple)) and self.aliases and len(path) == 0:
             return self.aliases.keys()
         raise self.error(path, 'is not a mapping')
 
