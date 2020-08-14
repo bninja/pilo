@@ -688,8 +688,8 @@ class String(Field):
         def compute(self):
             values = {}
             try:
-                for name, field in kwargs.iteritems():
-                    values[name] = reduce(getattr, field.split('.'), self.ctx.form)
+                for name, field in six.iteritems(kwargs):
+                    values[name] = six.moves.reduce(getattr, field.split('.'), self.ctx.form)
             except AttributeError as ex:
                 self.ctx.errors.invalid(str(ex))
                 return ERROR
@@ -748,7 +748,7 @@ class String(Field):
                 value, self.pattern_re.pattern
             ))
             return False
-        if self.choices and value not in self.choices + self.translations.values():
+        if self.choices and value not in self.choices + list(self.translations.values()):
             if len(self.choices) == 1:
                 self.ctx.errors.invalid('"{0}" is not "{1}"'.format(
                     value, self.choices[0],
@@ -1052,7 +1052,7 @@ class Tuple(Field):
             ))
             return ERROR
         value = []
-        for i in xrange(length):
+        for i in six.moves.range(length):
             with self.ctx(src=i):
                 item = self.fields[i].map()
                 if item in IGNORE:
@@ -1108,7 +1108,7 @@ class List(Field):
                 value = [value]
         else:
             value = []
-            for i in xrange(length):
+            for i in six.moves.range(length):
                 with self.ctx(src=i):
                     item = self.field.map()
                     if item in IGNORE:
@@ -1203,7 +1203,7 @@ class Code(Field):
     def load(cls, name, attr):
         module = __import__(name)
         try:
-            obj = reduce(getattr, attr.split('.'), module)
+            obj = six.moves.reduce(getattr, attr.split('.'), module)
         except AttributeError:
             raise TypeError('Unable to resolve {0}.{1}\n'.format(
                 module.__name__, attr
@@ -1494,7 +1494,7 @@ class FormMeta(type):
         return cls
 
 
-class Form(dict, CreatedCountMixin, ContextMixin):
+class Form(six.with_metaclass(FormMeta, dict, CreatedCountMixin, ContextMixin)):
     """
     This is a `dict` with an associated list of attached fields and typically
     represents some mapping structured to be parsed out of a `Source`.
@@ -1540,8 +1540,6 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         })
 
     """
-
-    __metaclass__ = FormMeta
 
     fields = None
 
@@ -1742,6 +1740,6 @@ class Form(dict, CreatedCountMixin, ContextMixin):
 
     def copy(self):
         dst = type(self)()
-        for k, v in self.iteritems():
+        for k, v in six.iteritems(self):
             dst[k] = v
         return dst
