@@ -147,7 +147,7 @@ class Mapping(collections.Mapping):
         mappings = []
         if merge is None:
             merge = src.mapping_merge
-            if src.merge_depth is not None and src.merge_depth <= len(path):
+            if src.merge_depth is not None and src.merge_depth <= len(paths):
                 merge = 'first'
         if merge not in ('first', 'last', 'combine'):
             raise ValueError('merge="{0}" invalid'.format(merge))

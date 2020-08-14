@@ -1,8 +1,7 @@
 from __future__ import with_statement
 
-from ConfigParser import ConfigParser
 import json
-from StringIO import StringIO
+import six
 
 import pilo
 
@@ -76,8 +75,8 @@ class TestDefaultSource(TestSource):
 class TestConfigSource(TestSource):
 
     def test_path(self):
-        config = ConfigParser()
-        config.readfp(StringIO("""\
+        config = six.moves.configparser.ConfigParser()
+        config.readfp(six.moves.StringIO("""\
 [slurp]
 state_dir = /var/lib/slurp
 backfill = f

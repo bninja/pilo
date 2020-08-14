@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import inspect
 import json
+import six
 
 from . import Source, Path, NONE
 
@@ -22,7 +23,7 @@ class JsonPath(Path):
 
     def resolve(self, container, part):
         try:
-            if not isinstance(part.key, basestring) or '.' not in part.key:
+            if not isinstance(part.key, six.string_types) or '.' not in part.key:
                 return container[part.key]
             value = container
             for atom in part.key.split('.'):
@@ -42,20 +43,20 @@ class JsonSource(Source):
         self.data = json.loads(text, encoding=encoding)
 
     def as_string(self, field, value):
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             return value
         if not self.strict:
             return str(value)
         raise self.error(field, '{0} is not a string'.format(value))
 
     def as_int(self, field, value):
-        if isinstance(value, (int, long)) and not isinstance(value, bool):
+        if isinstance(value, six.integer_types) and not isinstance(value, bool):
             return value
         if not self.strict:
             if isinstance(value, float):
                 if value.is_integer():
                     return int(value)
-            elif isinstance(value, basestring):
+            elif isinstance(value, six.string_types):
                 try:
                     return int(value)
                 except ValueError:
@@ -65,10 +66,10 @@ class JsonSource(Source):
     def as_float(self, field, value):
         if isinstance(value, (float)):
             return value
-        if isinstance(value, (int, long)):
+        if isinstance(value, six.integer_types):
             return float(value)
         if not self.strict:
-            if isinstance(value, basestring):
+            if isinstance(value, six.string_types):
                 try:
                     return float(value)
                 except ValueError:
@@ -87,7 +88,7 @@ class JsonSource(Source):
         return value
 
     parsers = {
-        basestring: as_string,
+        six.string_types[0]: as_string,
         int: as_int,
         float: as_float,
         bool: as_bool,

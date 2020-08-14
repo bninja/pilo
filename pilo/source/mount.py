@@ -1,4 +1,5 @@
 import collections
+import six
 
 from . import PathPart, Source, NONE, DefaultSource
 
@@ -83,7 +84,7 @@ class MountPath(collections.MutableSequence):
     # collections.MutableSequence
 
     def __setitem__(self, index, value):
-        if isinstance(value, (long, int, basestring)):
+        if isinstance(value, (six.integer_types, six.string_types)):
             value = PathPart(key=value)
         if index < 0:
             index = len(self) + index
@@ -107,7 +108,7 @@ class MountPath(collections.MutableSequence):
         del self.path[index - 1]
 
     def insert(self, index, value):
-        if isinstance(value, (long, int, basestring)):
+        if isinstance(value, (six.integer_types, six.string_types)):
             value = PathPart(key=value)
         if index < 0:
             index = len(self) + index

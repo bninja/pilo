@@ -1,5 +1,6 @@
 import collections
 import copy
+import six
 
 from . import Source, Path, ParserMixin, NONE
 
@@ -30,7 +31,7 @@ class DefaultPath(Path):
         return NONE
 
     def _as_attr(self, container, atom):
-        if isinstance(atom, basestring):
+        if isinstance(atom, six.string_types):
             try:
                 return getattr(container, atom)
             except (AttributeError, TypeError):
@@ -50,7 +51,7 @@ class DefaultPath(Path):
         return ':'.join(parts)
 
     def resolve(self, container, part):
-        if isinstance(part.key, basestring) and part.key.endswith('()'):
+        if isinstance(part.key, six.string_types) and part.key.endswith('()'):
             part = copy.copy(part)
             part.key = part.key[:-2]
             value = self.resolve(container, part)
@@ -58,7 +59,7 @@ class DefaultPath(Path):
                 return NONE
             return value()
 
-        if isinstance(part.key, basestring):
+        if isinstance(part.key, six.string_types):
             value = self._resolve(container, part.key)
             if value is NONE:
                 value = container

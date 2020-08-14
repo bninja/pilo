@@ -11,7 +11,7 @@ containers:
 - lists
 - tuples
 
-and primitives (e.g. int, basestring, etc). There are also `Source`
+and primitives (e.g. int, six.string_types[0], etc). There are also `Source`
 specializations for *computing* values from serializations:
 
 - `JsonSource`
@@ -22,6 +22,7 @@ There's also `UnionSource` which unions a collection of `Source`s.
 """
 import collections
 import inspect
+import six
 
 from .. import NONE, NOT_SET
 
@@ -80,7 +81,7 @@ class Path(collections.MutableSequence):
         if self:
             parts = ['{0}'.format(self[0])]
             for part in self[1:]:
-                if isinstance(part.key, (int, long)):
+                if isinstance(part.key, six.integer_types):
                     part = '[{0}]'.format(part.key)
                 else:
                     part = '.' + part.key
@@ -148,7 +149,7 @@ class Path(collections.MutableSequence):
     # collections.MutableSequence
 
     def __setitem__(self, index, value):
-        if isinstance(value, (long, int, basestring)):
+        if isinstance(value, (six.integer_types, six.string_types)):
             value = PathPart(key=value)
         self.parts[index] = value
 
@@ -156,7 +157,7 @@ class Path(collections.MutableSequence):
         del self.parts[index]
 
     def insert(self, index, value):
-        if isinstance(value, (long, int, basestring)):
+        if isinstance(value, (six.integer_types, six.string_types)):
             value = PathPart(key=value)
         self.parts.insert(index, value)
 
@@ -212,19 +213,19 @@ class ParserMixin(object):
     """
 
     def as_string(self, path, value):
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             return value
         raise self.error(path, '"{0}" is not a string'.format(value))
 
     def as_int(self, path, value):
-        if isinstance(value, (int, long)) and not isinstance(value, bool):
+        if isinstance(value, six.integer_types) and not isinstance(value, bool):
             pass
         elif isinstance(value, float):
             if not value.is_integer():
                 raise self.error(path, '"{0}" is not an integer'.format(value))
             else:
                 value = int(value)
-        elif isinstance(value, basestring):
+        elif isinstance(value, six.string_types):
             try:
                 value = int(value)
             except (ValueError, TypeError):
@@ -236,9 +237,9 @@ class ParserMixin(object):
     def as_float(self, path, value):
         if isinstance(value, (float)):
             pass
-        elif isinstance(value, (int, long)):
+        elif isinstance(value, six.integer_types):
             value = float(value)
-        elif isinstance(value, basestring):
+        elif isinstance(value, six.string_types):
             try:
                 value = float(value)
             except (ValueError, TypeError):
@@ -252,7 +253,7 @@ class ParserMixin(object):
             return value
         if isinstance(value, int):
             return value != 0
-        if isinstance(value, basestring):
+        if isinstance(value, six.string_types):
             if value.lower() in ('0', 'f', 'false'):
                 return False
             elif value.lower() in ('1', 't', 'true'):
@@ -263,7 +264,7 @@ class ParserMixin(object):
         return value
 
     parsers = {
-        basestring: as_string,
+        six.string_types[0]: as_string,
         int: as_int,
         float: as_float,
         bool: as_bool,
@@ -278,6 +279,7 @@ class ParserMixin(object):
         for t in types:
             if t in self.parsers:
                 return self.parsers[t]
+
             for mro_t in inspect.getmro(t):
                 if mro_t in self.parsers:
                     self.parsers[t] = self.types[mro_t]

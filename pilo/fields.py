@@ -49,6 +49,7 @@ import imp
 import inspect
 import numbers
 import re
+import six
 import time
 import uuid
 import warnings
@@ -474,7 +475,7 @@ class Field(CreatedCountMixin, ContextMixin):
             else:
                 value = self._parse(src_path)
             return value
-        except (SourceError, ValueError), ex:
+        except (SourceError, ValueError) as ex:
             self.ctx.errors.invalid(str(ex))
             return ERROR
 
@@ -670,7 +671,7 @@ class String(Field):
             self.max_length = kwargs.pop('max_length', None)
         pattern = kwargs.pop('pattern', None)
         if pattern:
-            if isinstance(pattern, basestring):
+            if isinstance(pattern, six.string_types):
                 pattern = re.compile(pattern)
             self.pattern_re = pattern
         else:
@@ -689,7 +690,7 @@ class String(Field):
             try:
                 for name, field in kwargs.iteritems():
                     values[name] = reduce(getattr, field.split('.'), self.ctx.form)
-            except AttributeError, ex:
+            except AttributeError as ex:
                 self.ctx.errors.invalid(str(ex))
                 return ERROR
             return fmt.format(**values)
@@ -701,7 +702,7 @@ class String(Field):
         Hooks munge to capture a value based on a regex.
         """
 
-        if isinstance(pattern, basestring):
+        if isinstance(pattern, six.string_types):
             pattern = re.compile(pattern)
 
         def munge(self, value):
@@ -718,7 +719,7 @@ class String(Field):
         return self.munge.attach(self)(munge)
 
     def _parse(self, path):
-        return path.primitive(basestring)
+        return path.primitive(six.string_types[0])
 
     def _validate(self, value):
         if not super(String, self)._validate(value):
@@ -802,11 +803,11 @@ class Number(Field):
 class Integer(Number):
 
     def pattern(self, pattern_re):
-        if isinstance(pattern_re, basestring):
+        if isinstance(pattern_re, six.string_types):
             pattern_re = re.compile(pattern_re)
 
         def parse(self, path):
-            value = path.primitive(basestring)
+            value = path.primitive(six.string_types[0])
             m = pattern_re.match(value)
             if not m:
                 raise ValueError('{0} does not match pattern "{1}"'.format(value, pattern_re.pattern))
@@ -824,11 +825,11 @@ Int = Integer
 class Float(Number):
 
     def pattern(self, pattern_re):
-        if isinstance(pattern_re, basestring):
+        if isinstance(pattern_re, six.string_types):
             pattern_re = re.compile(pattern_re)
 
         def parse(self, path):
-            value = path.primitive(basestring)
+            value = path.primitive(six.string_types[0])
             m = pattern_re.match(value)
             if not m:
                 raise ValueError('{0} does not match pattern "{1}"'.format(
@@ -849,7 +850,7 @@ class Decimal(Number):
             return path.value
         if isinstance(path.value, numbers.Number):
             return decimal.Decimal(path.value)
-        value = path.primitive(basestring)
+        value = path.primitive(six.string_types[0])
         return decimal.Decimal(value)
 
 
@@ -897,7 +898,7 @@ class Date(Field, RangeMixin):
     def _parse(self, path):
         if isinstance(path.value, datetime.date):
             return path.value
-        value = path.primitive(basestring)
+        value = path.primitive(six.string_types[0])
         if not self._format:
             self.ctx.errors.invalid('Unknown format for value "{0}"'.format(value))
             return ERROR
@@ -910,7 +911,7 @@ class Date(Field, RangeMixin):
             if spec == 'iso8601':
                 try:
                     return iso8601.parse_date(value).date()
-                except iso8601.ParseError, ex:
+                except iso8601.ParseError as ex:
                     if i == len(formats):
                         self.ctx.errors.invalid(str(ex))
                         return ERROR
@@ -918,7 +919,7 @@ class Date(Field, RangeMixin):
             else:
                 try:
                     return datetime.datetime.strptime(value, spec).date()
-                except ValueError, ex:
+                except ValueError as ex:
                     if i == len(formats):
                         self.ctx.errors.invalid(str(ex))
                         return ERROR
@@ -954,7 +955,7 @@ class Time(Field, RangeMixin):
         value = path.value
         if isinstance(value, (time.struct_time, datetime.time)):
             return value
-        value = path.primitive(basestring)
+        value = path.primitive(six.string_types[0])
         if self._format is not None:
             parsed = time.strptime(value, self._format)
         else:
@@ -992,11 +993,11 @@ class Datetime(Field, RangeMixin):
     def _parse(self, path):
         if isinstance(path.value, datetime.datetime):
             return path.value
-        value = path.primitive(basestring)
+        value = path.primitive(six.string_types[0])
         if self._format == 'iso8601':
             try:
                 parsed = iso8601.parse_date(value)
-            except iso8601.ParseError, ex:
+            except iso8601.ParseError as ex:
                 self.ctx.errors.invalid(str(ex))
                 return ERROR
         elif self._format is not None:
@@ -1024,7 +1025,7 @@ class Tuple(Field):
     def __init__(self, *args, **kwargs):
         fields = list(args)
         args = []
-        if isinstance(fields[0], basestring):
+        if isinstance(fields[0], six.string_types):
             args.append(fields.pop(0))
         if len(fields) == 1:
             fields = fields[0]
@@ -1213,19 +1214,19 @@ class Code(Field):
     def compile(cls, name, code, **code_globals):
         module = imp.new_module('<{0}>'.format(name))
         module.__dict__.update(code_globals)
-        exec code in module.__dict__
+        exec(code) in module.__dict__
         return module
 
     def _parse(self, path):
         value = super(Code, self)._parse(path)
-        if value in IGNORE or not isinstance(value, basestring):
+        if value in IGNORE or not isinstance(value, six.string_types):
             return value
 
         # in-line
         if self.inline_match(value):
             try:
                 return self.compile(self.name, value)
-            except Exception, ex:
+            except Exception as ex:
                 self.ctx.errors.invalid(str(ex))
                 return ERROR
 
@@ -1235,7 +1236,7 @@ class Code(Field):
             name, attr = match
             try:
                 return self.load(name, attr)
-            except Exception, ex:
+            except Exception as ex:
                 self.ctx.errors.invalid(str(ex))
                 return ERROR
 
@@ -1250,7 +1251,7 @@ class UUID(Field):
         value = self.ctx.src_path.primitive()
         if isinstance(value, uuid.UUID):
             return value
-        return uuid.UUID(self.ctx.src_path.primitive(basestring))
+        return uuid.UUID(self.ctx.src_path.primitive(six.string_types[0]))
 
 
 class Type(String):
@@ -1352,7 +1353,7 @@ class PolymorphicSubForm(Field):
     def _form_type(self, path):
         try:
             identity = self.type_field.probe(path.value)
-        except ValueError, ex:
+        except ValueError as ex:
             self.ctx.errors.invalid(str(ex))
             return ERROR
         if identity is None:
@@ -1427,7 +1428,7 @@ class Group(Field):
 
     def _match(self, key):
         for src, field in self.fields:
-            if isinstance(src, basestring):
+            if isinstance(src, six.string_types):
                 if src == key:
                     return field, None
             else:
@@ -1606,7 +1607,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
     def _unmapped(self, directive):
         if not directive:
             return
-        if isinstance(directive, basestring):
+        if isinstance(directive, six.string_types):
             if directive == 'capture':
                 directive = (String(), Field())
             elif directive == 'ignore':
@@ -1669,7 +1670,7 @@ class Form(dict, CreatedCountMixin, ContextMixin):
         return self
 
     def has(self, field):
-        if isinstance(field, basestring):
+        if isinstance(field, six.string_types):
             name = field
             if name in self:
                 return True
