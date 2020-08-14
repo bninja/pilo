@@ -66,13 +66,14 @@ class UnionPath(Path):
 
 class UnionSource(Source):
 
-    def __init__(self,
-                 srcs,
-                 merge='first',
-                 mapping_merge=None,
-                 sequence_merge=None,
-                 merge_depth=None,
-        ):
+    def __init__(
+        self,
+        srcs,
+        merge='first',
+        mapping_merge=None,
+        sequence_merge=None,
+        merge_depth=None,
+    ):
         super(UnionSource, self).__init__()
         for i, src in enumerate(srcs):
             if isinstance(src, Source):

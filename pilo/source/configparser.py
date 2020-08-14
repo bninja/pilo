@@ -115,14 +115,15 @@ class ConfigSource(Source, ParserMixin):
         with open(path, 'r') as fo:
             return cls(fo.read(), *args, **kwargs)
 
-    def __init__(self,
-                 config,
-                 section=None,
-                 location=None,
-                 defaults=None,
-                 preserve_whitespace=False,
-                 preserve_case=False,
-        ):
+    def __init__(
+        self,
+        config,
+        section=None,
+        location=None,
+        defaults=None,
+        preserve_whitespace=False,
+        preserve_case=False,
+    ):
         super(ConfigSource, self).__init__()
         if preserve_whitespace and location is None:
             raise ValueError('preserve_white_space=True without location')
@@ -179,9 +180,7 @@ class ConfigSource(Source, ParserMixin):
         value = self.parser(types)(self, path, path.value)
 
         # preserve white-space for mulit-line strings
-        if (self.preserve_whitespace and
-            isinstance(value, basestring) and
-            value.count('\n') > 0):
+        if self.preserve_whitespace and isinstance(value, basestring) and value.count('\n') > 0:
             value = self.as_raw(path)
 
         return value
