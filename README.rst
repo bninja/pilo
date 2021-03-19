@@ -2,12 +2,6 @@
 pilo
 ====
 
-.. image:: https://travis-ci.org/bninja/pilo.png
-   :target: https://travis-ci.org/bninja/pilo
-
-.. image:: https://coveralls.io/repos/bninja/pilo/badge.png
-   :target: https://coveralls.io/r/bninja/pilo
-
 Yet another form parser.
 
 dev
@@ -19,28 +13,23 @@ dev
    $ cd pilo
    $ mkvirtualenv pilo
    (pilo)$ pip install -e .[tests]
-   (pilo)$ py.test tests/ --cov=pilo --cov-report term-missing
+   (pilo)$ py.test
+
+Or with docker
+
+.. code:: bash
+
+    $ git clone https://github.com/eventbrite/pilo.git
+    $ cd pilo
+    $ docker build --tag=pilo .
+    $ docker run pilo
 
 release
 -------
 
-All is well:
-
-.. code:: bash
-
-   (pilo)$ py.test tests/ --cov=pilo --cov-report term-missing
-
-so update ``__version__`` in:
-
-- ``pilo/__init__.py``
-
-then commit and tag it (`travis <https://travis-ci.org/bninja/pilo>`_ will publish it to `pypi <https://pypi.python.org/pypi/pilo/>`_):
-
-.. code:: bash
-
-   $ git commit -am "release v{version}"
-   $ git tag -a v{version} -m "release v{version}"
-   $ git push --tags
+Using our internal invoke release tool: https://github.com/eventbrite/invoke-release#using-invoke-release-on-existing-projects
+When prompted to enter a version, use +eventbrite at the end like so:
+    Enter a new version (or "exit"): 2.2.0+eventbrite
 
 usage
 -----
