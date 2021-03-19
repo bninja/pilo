@@ -1,0 +1,17 @@
+*.pyc
+*.swp
+.cache
+.circleci/
+.coverage
+.dockerignore
+.git/
+.idea
+.mypy_cache
+.pytest_cache
+.yak/
+Dockerfile
+Jenkinsfile
+__pycache__
+coverage.xml
+docker-compose.yml
+pytests.xml
