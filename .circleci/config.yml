@@ -128,7 +128,7 @@ jobs:
           when: always
       - slack/notify:
           channel: "common-libraries-circleci"
-          custom: '{"attachments":[{"color": "danger","mrkdwn_in": ["text"],"text": "Failed to build: *${CIRCLE_PROJECT_REPONAME}*\nUser: *${CIRCLE_USERNAME}*\n${PR_LNK}CircleCI build url: ${CIRCLE_BUILD_URL}\nFailed on Step: *${STEP}*"}]}'
+          custom: '{"attachments":[{"color": "danger","mrkdwn_in": ["text"],"text": "Cut: ${CIRCLE_BRANCH#"test_to_"} Failed to build: *${CIRCLE_PROJECT_REPONAME}*\nUser: *${CIRCLE_USERNAME}*\n${PR_LNK}CircleCI build url: ${CIRCLE_BUILD_URL}\nFailed on Step: *${STEP}*"}]}'
           event: fail
       - slack/notify:
           channel: "common-libraries-circleci"
