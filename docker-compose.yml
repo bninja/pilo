@@ -1,0 +1,7 @@
+services:
+    tox:
+        build:
+            context: .
+        environment:
+            - PIP_INDEX_URL=https://aws:${CODEARTIFACT_AUTH_TOKEN}@eventbrite-shared-353605023268.d.codeartifact.us-east-1.amazonaws.com/pypi/python/simple/
+

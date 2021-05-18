@@ -43,6 +43,7 @@ This defines `Form` and the `Field`s use to build them. Use it like:
 """
 import contextlib
 import copy
+import sys
 import datetime
 import decimal
 import imp
@@ -63,6 +64,11 @@ except ImportError:
 from . import (
     NONE, NOT_SET, ERROR, IGNORE, ctx, ContextMixin, Close, Source, SourceError, DefaultSource, Types,
 )
+
+if sys.version_info <= (3, 3):
+    argspec = inspect.getargspec
+else:
+    argspec = inspect.getfullargspec
 
 
 __all__ = [
@@ -207,8 +213,8 @@ class Hook(object):
         # register
         if self.func is None and args and callable(args[0]):
             func = args[0]
-            if inspect.getargspec(func) != self.func_spec:
-                raise TypeError('{0} signature does not match {1}'.format(
+            if argspec(func) != self.func_spec:
+                raise TypeError('{0} argspec does not match {1}'.format(
                     func.__name__, self.func_spec
                 ))
             self.func = func
@@ -334,13 +340,13 @@ class Field(CreatedCountMixin, ContextMixin):
         super(Field, self).__init__()
 
         # hooks
-        self.compute = Hook(self, inspect.getargspec(self._compute))
-        self.resolve = Hook(self, inspect.getargspec(self._resolve))
-        self.parse = Hook(self, inspect.getargspec(self._parse))
-        self.default = Hook(self, inspect.getargspec(self._default))
-        self.munge = Hook(self, inspect.getargspec(self._munge))
-        self.filter = Hook(self, inspect.getargspec(self._filter))
-        self.validate = Hook(self, inspect.getargspec(self._validate))
+        self.compute = Hook(self, argspec(self._compute))
+        self.resolve = Hook(self, argspec(self._resolve))
+        self.parse = Hook(self, argspec(self._parse))
+        self.default = Hook(self, argspec(self._default))
+        self.munge = Hook(self, argspec(self._munge))
+        self.filter = Hook(self, argspec(self._filter))
+        self.validate = Hook(self, argspec(self._validate))
 
         # site
         self.parent = None
@@ -441,7 +447,7 @@ class Field(CreatedCountMixin, ContextMixin):
         if not self.is_attached:
             return self.compute.attach(self)(compute)
         other = self.clone()
-        other.compute = Hook(other, inspect.getargspec(other._compute))
+        other.compute = Hook(other, argspec(other._compute))
         return other.compute.attach(other)(compute)
 
     def ignore(self, *args):
@@ -1137,7 +1143,7 @@ class Dict(Field):
 
     def __init__(self, key_field, value_field, *args, **kwargs):
         self.key_field = key_field.attach(self)
-        self.key_filter = Hook(self, inspect.getargspec(self._key_filter))
+        self.key_filter = Hook(self, argspec(self._key_filter))
         self.value_field = value_field.attach(self)
         self.required_keys = kwargs.pop('required_keys', [])
         self.max_keys = kwargs.pop('max_keys', None)

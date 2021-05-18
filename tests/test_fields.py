@@ -427,7 +427,7 @@ class TestFormExceptions(TestCase):
         with self.assertRaises(pilo.fields.FormError) as ctx:
             DatingProfile(profile_with_one_error)
 
-        self.assertEquals(
+        self.assertEqual(
             ctx.exception.message,
             '\n'
             '* Invalid: postal_code - "9021" must have length >= 5'
@@ -436,7 +436,7 @@ class TestFormExceptions(TestCase):
         with self.assertRaises(pilo.fields.FormError) as ctx:
             DatingProfile(profile_with_two_errors)
 
-        self.assertEquals(
+        self.assertEqual(
             ctx.exception.message,
             '\n'
             '* Invalid: postal_code - "9021" must have length >= 5'
@@ -447,7 +447,7 @@ class TestFormExceptions(TestCase):
         with self.assertRaises(pilo.fields.FormError) as ctx:
             DatingProfile(profile_with_three_errors)
 
-        self.assertEquals(
+        self.assertEqual(
             ctx.exception.message,
             '\n'
             '* Invalid: postal_code - "9021" must have length >= 5'
@@ -494,7 +494,7 @@ class TestFormExceptions(TestCase):
                     dict(),
                     ]
             )
-        self.assertEquals(
+        self.assertEqual(
             ctx.exception.message,
             '\n'
             '* Invalid: similarity - "Not an integer" is not an integer'

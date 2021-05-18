@@ -59,7 +59,7 @@ jobs:
             --branch ${CIRCLE_BRANCH} \
             --aws-access-key-id ${ECR35_AWS_ACCESS_KEY_ID} \
             --aws-secret-access-key ${ECR35_AWS_SECRET_ACCESS_KEY} \
-            --publish-release-wheel=py27
+            --publish-release-wheel=py27,py35
   test:
     executor:
       name: small-docker
@@ -109,7 +109,7 @@ jobs:
           name: Run tests
           command: |
             echo "export STEP=\"Run tests\"" >> $BASH_ENV
-            docker run $LIBRARY_NAME
+            docker-compose run tox
       - run:
           name: Retrieve test results and store
           command: |

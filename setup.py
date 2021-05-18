@@ -1,8 +1,6 @@
 import codecs
-import re
 import os
 import setuptools
-from setuptools.command.test import test as TestCommand
 
 
 with codecs.open(
@@ -13,27 +11,16 @@ with codecs.open(
     __version__ = _version_file.read().strip()
 
 
-class PyTest(TestCommand):
+install_requires = [
+    'six >=1.16',
+]
 
-    def finalize_options(self):
-        TestCommand.finalize_options(self)
-        self.test_args = []
-        self.test_suite = True
-
-    def run_tests(self):
-        import pytest
-        pytest.main(self.test_args)
-
-
-extras_require = {
-    'tests': [
-        'pytest >=2.5.2,<3',
-        'pytest-cov >=1.7,<2',
-        'mock >=1.0,<2.0',
-        'unittest2 >=0.5.1,<0.6',
-        'iso8601 >=0.1,<0.2',
-    ],
-}
+tests_require = [
+    'pytest',
+    'pytest-cov',
+    'mock',
+    'iso8601',
+]
 
 packages = setuptools.find_packages('.', exclude=('tests', 'tests.*'))
 
@@ -49,19 +36,19 @@ setuptools.setup(
     packages=packages,
     package_data={str('pilo'): [str('version.txt')]},
     zip_safe=False,
-    include_package_data=True,
-    extras_require=extras_require,
-    tests_require=extras_require['tests'],
-    install_requires=[],
-    cmdclass={'test': PyTest},
+    install_requires=install_requires,
+    tests_require=tests_require,
+    extras_require={
+        'testing': tests_require
+    },
     classifiers=[
         'Intended Audience :: Developers',
-        'Development Status :: 4 - Beta',
         'Natural Language :: English',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'License :: OSI Approved :: ISC License (ISCL)',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.5',
     ],
 )

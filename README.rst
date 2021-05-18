@@ -4,25 +4,10 @@ pilo
 
 Yet another form parser.
 
-dev
----
+test
+----
 
-.. code:: bash
-
-   $ git clone git@github.com:bninja/pilo.git
-   $ cd pilo
-   $ mkvirtualenv pilo
-   (pilo)$ pip install -e .[tests]
-   (pilo)$ py.test
-
-Or with docker
-
-.. code:: bash
-
-    $ git clone https://github.com/eventbrite/pilo.git
-    $ cd pilo
-    $ docker build --tag=pilo .
-    $ docker run pilo
+Run ``tox`` to run tests in Python 2 & 3.
 
 release
 -------
