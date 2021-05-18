@@ -3,3 +3,8 @@
 -----------------------------
 [PATCH] CircleCI initial setup
 
+
+0.8.0+eventbrite (2021-05-18)
+-----------------------------
+- [MINOR] Fixes for py27/py35 compatibility (#13)
+

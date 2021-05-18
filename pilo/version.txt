@@ -1,1 +1,1 @@
-0.7.1+eventbrite
+0.8.0+eventbrite
