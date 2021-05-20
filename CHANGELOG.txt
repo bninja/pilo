@@ -8,3 +8,8 @@
 -----------------------------
 - [MINOR] Fixes for py27/py35 compatibility (#13)
 
+
+0.8.1+eventbrite (2021-05-20)
+-----------------------------
+release a version to fix devpi
+
